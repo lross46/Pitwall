@@ -14,14 +14,14 @@ jobs:
           cat > t.mjs <<'JS'
           import { chromium } from "playwright";
           const b = await chromium.launch(); const p = await b.newPage();
-          for (const u of ["https://www.motogp.com/en/gp-results/2026/INA/MotoGP/RAC/Classification","https://www.motogp.com/en/gp-results/2025/QAT/MotoGP/RAC/Classification"]) {
+          for (const u of ["https://www.motogp.com/en/gp-results/2026/ina/motogp/rac/classification","https://www.motogp.com/en/gp-results/2026/ina/moto2/q2/classification","https://www.motogp.com/en/gp-results/2025/qat/motogp/spr/classification"]) {
             await p.goto(u, { waitUntil: "networkidle", timeout: 60000 }).catch(e=>console.log("goto", e.message));
             await p.waitForTimeout(4000);
             console.log("==", u, "->", p.url());
             const sel = await p.$$eval("select", (s) => s.map((x) => x.options[x.selectedIndex]?.text?.trim()));
             console.log("selects:", JSON.stringify(sel));
             const t = await p.evaluate(() => document.body.innerText);
-            const i = t.indexOf("Pos"); console.log(t.slice(Math.max(0,i-300), i+400).replace(/\s+/g," "));
+            const i = t.indexOf("Pos"); console.log(t.slice(Math.max(0,i-160), i+120).replace(/\s+/g," "));
           }
           await b.close();
           JS
