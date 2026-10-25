@@ -1,7 +1,7 @@
 // Builds site/data/schedule.json from public schedule sources.
 // Each source is fetched independently; if one fails, the last published
 // data for that series is kept so the app never loses a calendar.
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, appendFile } from "node:fs/promises";
 
 const OUT = new URL("../site/data/schedule.json", import.meta.url);
 const PREVIOUS_URL = process.env.PREVIOUS_URL || "";
@@ -98,26 +98,33 @@ async function dorna(acronym) {
       events.push({ name: titleCase(nm), place: e.circuit?.name || "", round: i + 1, season: y, sessions });
     });
   }
-  if (!events.length) throw new Error(`no ${acronym} sessions`);
+  if (!events.length) {
+    const seen = new Set();
+    for (const y of YEARS) for (const e of (await motogpEvents(y)) || []) for (const b of e.broadcasts || []) if (b.category?.acronym) seen.add(b.category.acronym);
+    throw new Error(`no ${acronym} sessions (categories in feed: ${[...seen].join(", ")})`);
+  }
   return events;
 }
 function titleCase(s) {
   return s === s.toUpperCase() ? s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase()).replace(/\bGp\b/g, "GP").replace(/\b(Of|De|Del|Di)\b/g, (w) => w.toLowerCase()) : s;
 }
 
-// ---- FIA WEC official site (schema.org JSON-LD on each race page)
-async function wec() {
+// ---- ACO sites: FIA WEC and ELMS (schema.org JSON-LD on each race page)
+async function aco(base) {
   const events = [];
+  const seenSlugs = new Set();
   for (const y of YEARS) {
     let html;
-    try { html = await getText(`https://www.fiawec.com/en/season/${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    try { html = await getText(`${base}/en/season/${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
     const slugs = [...new Set([...html.matchAll(/\/en\/race\/([a-z0-9-]+)/g)].map((m) => m[1]))]
-      .filter((s) => s.endsWith(`-${y}`) && !/prologue|official-test|collective-test/.test(s));
+      .filter((s) => (base.includes("fiawec") ? s.endsWith(`-${y}`) : true) && !/prologue|official-test|collective-test|test-days?/.test(s));
     let round = 0;
     for (const slug of slugs) {
       round++;
+      if (seenSlugs.has(slug)) continue;
+      seenSlugs.add(slug);
       let page;
-      try { page = await getText(`https://www.fiawec.com/en/race/${slug}`); } catch { continue; }
+      try { page = await getText(`${base}/en/race/${slug}`); } catch { continue; }
       const blocks = [...page.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/g)];
       let ev = null;
       for (const b of blocks) {
@@ -129,7 +136,7 @@ async function wec() {
       }
       if (!ev) continue;
       const fullName = String(ev.name || slug).trim();
-      const name = fullName.replace(/^(FIA\s+)?WEC\s*[-–]?\s*/i, "").replace(/\s+\d{4}$/, "").trim();
+      const name = fullName.replace(/^(FIA\s+)?(WEC|ELMS)\s*[-–]?\s*/i, "").replace(/\s+\d{4}$/, "").trim();
       const sessions = [].concat(ev.subEvent || [])
         .map((s) => {
           // "Qualifying - LMGT3 - 6 Hours of Monza 2026" -> "Qualifying - LMGT3"
@@ -141,10 +148,58 @@ async function wec() {
         .filter((s) => s.start && s.label)
         .sort((a, b) => a.start.localeCompare(b.start));
       if (!sessions.length) continue;
-      events.push({ name, place: ev.location?.name || "", round, season: y, sessions });
+      events.push({ name, place: ev.location?.name || "", round, season: +(slug.match(/(20\d\d)$/) || [])[1] || y, sessions });
     }
   }
-  if (!events.length) throw new Error("no WEC events parsed");
+  if (!events.length) throw new Error(`no events parsed from ${base}`);
+  return events;
+}
+
+// ---- SRO sites: GT World Challenge Europe (HTML timetable on each event page)
+const MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const strip = (s) => s.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+const hm = (s) => { const m = s.match(/(\d{1,2})[:.h](\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+async function sro(base) {
+  const html = await getText(`${base}/calendar`);
+  // Each championship round has a "Round N" label near its /event/ link.
+  const rounds = new Map();
+  for (const m of html.matchAll(/Round\s+(\d+)/g)) {
+    const after = html.slice(m.index, m.index + 4000);
+    const before = html.slice(Math.max(0, m.index - 4000), m.index);
+    const link = (after.match(/href="([^"]*\/event\/[^"]+)"/) || [...before.matchAll(/href="([^"]*\/event\/[^"]+)"/g)].pop() || [])[1];
+    if (!link) continue;
+    const url = link.startsWith("http") ? link : base + link;
+    if (!rounds.has(url) || rounds.get(url) > +m[1]) rounds.set(url, +m[1]);
+  }
+  const events = [];
+  for (const [url, round] of [...rounds].sort((a, b) => a[1] - b[1])) {
+    let page;
+    try { page = await getText(url); } catch { continue; }
+    const name = strip((page.match(/class="[^"]*feature__heading[^"]*"[^>]*>([\s\S]*?)<\//) || [])[1] || "") || url.split("/").pop();
+    const year = +((page.match(/20\d\d/) || [])[0] || now.getUTCFullYear());
+    const sessions = [];
+    for (const c of page.split(/class="[^"]*timetable__container/).slice(1)) {
+      const cap = strip((c.match(/class="[^"]*timetable__caption[^"]*"[^>]*>([\s\S]*?)<\/(?:caption|div|h\d|span|p)>/) || [])[1] || "");
+      const dm = cap.match(/(\d{1,2})\s+([A-Za-z]{3})/);
+      if (!dm || MONTHS[dm[2].toLowerCase()] == null) continue;
+      const day = +dm[1], mon = MONTHS[dm[2].toLowerCase()];
+      for (const row of c.split(/<tr/).slice(1)) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((x) => strip(x[1]));
+        if (cells.length < 3) continue;
+        const [label, local, gmt] = cells;
+        const lt = hm(local), gt = hm(gmt);
+        if (!label || lt == null || gt == null) continue;
+        if (/test|parade|pit ?walk|autograph|warm|pre-qual|grid walk|podium|press/i.test(label)) continue;
+        let off = lt - gt; if (off > 720) off -= 1440; if (off < -720) off += 1440;
+        const start = new Date(Date.UTC(year, mon, day, 0, lt) - off * 60000);
+        sessions.push({ label, start: start.toISOString(), race: /^(main\s+)?race(\s*\d+)?$/i.test(label) || /hours? race$/i.test(label) });
+      }
+    }
+    if (!sessions.length) continue;
+    sessions.sort((a, b) => a.start.localeCompare(b.start));
+    events.push({ name, place: "", round, season: year, sessions });
+  }
+  if (!events.length) throw new Error(`no events parsed from ${base}`);
   return events;
 }
 
@@ -178,11 +233,15 @@ const SOURCES = {
   motogp: () => sportstimes("motogp"),
   moto2: () => dorna("MT2"),
   moto3: () => dorna("MT3"),
-  wec: () => wec(),
+  wec: () => aco("https://www.fiawec.com"),
+  gtwce: () => sro("https://www.gt-world-challenge-europe.com"),
   indycar: () => sportstimes("indycar"),
   fe: () => sportstimes("fe"),
   "f1-academy": () => sportstimes("f1-academy"),
   nascar: () => nascar("series_1"),
+  "nascar-oreilly": () => nascar("series_2"),
+  elms: () => aco("https://www.europeanlemansseries.com"),
+  motoe: () => dorna("MTE"),
 };
 
 let previous = {};
@@ -214,3 +273,5 @@ for (const [id, fn] of Object.entries(SOURCES)) {
 await mkdir(new URL("../site/data/", import.meta.url), { recursive: true });
 await writeFile(OUT, JSON.stringify({ generated: now.toISOString(), series }));
 console.log(`Wrote schedule.json (${failures} source(s) failed)`);
+// The workflow publishes first, then fails the run if any source broke, so GitHub emails the owner.
+if (process.env.GITHUB_OUTPUT) await appendFile(process.env.GITHUB_OUTPUT, `failures=${failures}\n`);

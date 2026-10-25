@@ -19,6 +19,8 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      failures: ${{ steps.fetch.outputs.failures }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,6 +29,7 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v5
       - name: Fetch schedules
+        id: fetch
         env:
           PREVIOUS_URL: ${{ steps.pages.outputs.base_url }}/data/schedule.json
         run: node scripts/build-data.mjs
@@ -43,3 +46,13 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Runs after publishing so working series still update. A red run makes GitHub email the repo owner.
+  report:
+    needs: [build, deploy]
+    if: needs.build.outputs.failures != '0'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::${{ needs.build.outputs.failures }} schedule source(s) failed. See the 'Fetch schedules' step for which ones."
+          exit 1

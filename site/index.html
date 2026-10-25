@@ -129,6 +129,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .foot{color:var(--muted);font-size:12px}
 @media (prefers-reduced-motion:no-preference){.day,.chip,.row{transition:background .15s,border-color .15s}}
 .loading{color:var(--muted);padding:18px 0}
+.stale{width:100%;font-style:normal;font-size:12px;font-weight:600;color:var(--accent)}
 </style>
 </head>
 <body>
@@ -174,10 +175,21 @@ const SERIES = [
   {id:"moto3", name:"Moto3", full:"Moto3", c:"#8F5A2A", main:true},
   {id:"wec", name:"WEC", full:"FIA World Endurance", c:"#0E8F7E", main:true},
   {id:"indycar", name:"IndyCar", full:"NTT IndyCar Series", c:"#5B45C9", main:true},
+  {id:"wsbk", name:"WorldSBK", full:"FIM Superbike World Championship", c:"#B3122B", main:true},
+  {id:"gtwce", name:"GTWC Europe", full:"GT World Challenge Europe", c:"#2F8A3B", main:true},
   {id:"fe", name:"Formula E", full:"ABB FIA Formula E", c:"#0093A8"},
   {id:"f1-academy", name:"F1 Academy", full:"F1 Academy", c:"#C2508C"},
+  {id:"motoe", name:"MotoE", full:"FIM MotoE World Championship", c:"#3BA55C"},
+  {id:"elms", name:"ELMS", full:"European Le Mans Series", c:"#1C6E8C"},
+  {id:"imsa", name:"IMSA", full:"IMSA WeatherTech SportsCar Championship", c:"#4A5BA8"},
   {id:"nascar", name:"NASCAR", full:"NASCAR Cup Series", c:"#C9A100"},
+  {id:"nascar-oreilly", name:"NASCAR O'Reilly", full:"NASCAR O'Reilly Auto Parts Series", c:"#A8862B"},
   {id:"indynxt", name:"Indy NXT", full:"Indy NXT", c:"#6F7FA0"},
+  {id:"wrc", name:"WRC", full:"FIA World Rally Championship", c:"#D4651A"},
+  {id:"dtm", name:"DTM", full:"DTM", c:"#5C6670"},
+  {id:"btcc", name:"BTCC", full:"British Touring Car Championship", c:"#2E5FA8"},
+  {id:"supercars", name:"Supercars", full:"Repco Supercars Championship", c:"#B8452E"},
+  {id:"superformula", name:"Super Formula", full:"Super Formula", c:"#8A3FA0"},
 ];
 const SBY = Object.fromEntries(SERIES.map(s=>[s.id,s]));
 
@@ -187,7 +199,12 @@ let GENERATED = null;
 function load(data){
   GENERATED = data.generated ? new Date(data.generated) : null;
   SESS = [];
-  for(const s of SERIES) s.nodata = !(data.series && data.series[s.id] && data.series[s.id].events.length);
+  for(const s of SERIES){
+    const ser = data.series && data.series[s.id];
+    s.nodata = !(ser && ser.events.length);
+    s.stale = !!(ser && ser.stale);
+    s.updated = ser && ser.updated ? new Date(ser.updated) : null;
+  }
   for(const [sid, ser] of Object.entries(data.series||{})){
     if(!SBY[sid]) continue;
     for(const ev of ser.events){
@@ -299,7 +316,7 @@ function renderAgenda(){
   h += `<div class="sub">${list.length} session${list.length>1?"s":""} · ${esc(tzName.replace(/_/g," "))}</div>`;
   for(const ss of groups.values()){
     const s0=ss[0], sr=SBY[s0.sid];
-    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small></div><ul class="ss">`;
+    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small>${sr.stale?`<em class="stale">May be outdated: couldn't refresh since ${sr.updated?fmtShort.format(sr.updated):"recently"}</em>`:""}</div><ul class="ss">`;
     for(const s of ss){
       const st = status(s,now);
       const stTxt = st==="live"?"Live":st==="done"?"Done":"in "+rel(s.d-now);
