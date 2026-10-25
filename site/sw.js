@@ -1,5 +1,5 @@
 // Network first, falling back to the last cached copy so the app opens offline.
-const CACHE = "pitwall-v2";
+const CACHE = "pitwall-v3";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "data/schedule.json", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {

@@ -138,6 +138,31 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .sres{font-size:12px;font-weight:600;color:var(--accent);text-decoration:none;margin-left:6px}
 .stale{width:100%;font-style:normal;font-size:12px;font-weight:600;color:var(--accent)}
 html,body{overscroll-behavior-y:contain}
+/* season view */
+.season{position:fixed;inset:0;z-index:30;background:var(--bg);overflow-y:auto;overscroll-behavior:contain;padding-top:env(safe-area-inset-top,0px)}
+.season .in{max-width:720px;margin:0 auto;padding:12px max(16px,env(safe-area-inset-right,0px)) calc(40px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:12px}
+.shead{position:sticky;top:0;z-index:1;background:var(--bg);display:flex;align-items:center;gap:10px;padding:6px 0 10px;border-bottom:1px solid var(--line)}
+.shead h2{font-family:var(--f-display);font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.03em;margin:0;flex:1;min-width:0;line-height:1.05}
+.shead h2 small{display:block;font-family:var(--f-body);font-size:12.5px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--muted)}
+.yrs{display:flex;gap:6px}
+.yrs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 12px;font-family:var(--f-mono);font-weight:700;font-size:13px}
+.yrs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.rnd{background:var(--surface);border:1px solid var(--line);border-radius:10px;--c:var(--muted)}
+.rnd>summary{list-style:none;display:grid;grid-template-columns:2.6em 1fr auto;gap:2px 10px;align-items:center;padding:10px 12px;cursor:pointer}
+.rnd>summary::-webkit-details-marker{display:none}
+.rnd .rn{font-family:var(--f-mono);font-weight:700;font-size:13px;color:var(--muted)}
+.rnd .rt b{display:block;font-weight:700;font-size:15.5px;line-height:1.25}
+.rnd .rt small{color:var(--muted);font-size:13px}
+.rnd .rd{font-family:var(--f-display);font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.03em;text-align:right;white-space:nowrap}
+.rnd .rd small{display:block;font-family:var(--f-body);font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted)}
+.rnd.past{opacity:.6}
+.rnd.past[open]{opacity:1}
+.rnd.nx{border-color:var(--c);box-shadow:inset 4px 0 0 var(--c)}
+.rnd.nx .rd small,.rnd.lv .rd small{color:var(--accent)}
+.rnd .body{padding:0 12px 10px;display:grid;gap:6px}
+.rnd .body .res{margin-left:0;justify-self:start}
+.pill.tap{border:0;cursor:pointer}
+.pill.tap::after{content:"\203A";margin-left:2px;opacity:.85}
 .ptr{position:fixed;left:50%;top:0;z-index:50;transform:translate(-50%,-48px);padding:7px 14px;border-radius:999px;background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:0 2px 10px rgba(0,0,0,.15);font-size:13px;font-weight:600;pointer-events:none;opacity:0;transition:opacity .15s}
 </style>
 </head>
@@ -146,8 +171,8 @@ html,body{overscroll-behavior-y:contain}
 
 <div class="wrap">
   <header>
-    <h1>Pit Wall<span>.</span></h1>
-    <div class="tz" id="tz"></div>
+    <div><h1>Pit Wall<span>.</span></h1><div class="tz" id="tz" style="margin-top:4px"></div></div>
+    <button class="nav" id="seasons" type="button">Full seasons &#8250;</button>
   </header>
   <section class="next" id="next" aria-live="polite" hidden></section>
   <div class="chips" id="chips" role="toolbar" aria-label="Series"></div>
@@ -172,6 +197,13 @@ html,body{overscroll-behavior-y:contain}
     <p>Tap to add or remove from your calendar.</p>
     <div id="others" style="display:grid;gap:8px"></div>
     <button class="done-btn" id="close" type="button">Done</button>
+  </div>
+</div>
+
+<div class="season" id="season" role="dialog" aria-modal="true" aria-labelledby="season-h" hidden>
+  <div class="in">
+    <div class="shead"><button class="nav" id="sback" type="button" aria-label="Back">&#8249;</button><h2 id="season-h"></h2><div class="yrs" id="yrs"></div></div>
+    <div id="sbody" style="display:grid;gap:8px"></div>
   </div>
 </div>
 
@@ -228,7 +260,7 @@ function load(data){
         // All-day entries (dates only) are pinned to local noon of their calendar date.
         const t = new Date(x.start);
         const d = x.allDay ? new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 12) : t;
-        SESS.push({sid, d, allDay:!!x.allDay, url:x.url||"", evUrl:ev.url||"", label:x.label, key:!!x.race, ev:ev.name, place:ev.place||"", round:ev.round, evKey:sid+"|"+ev.season+"|"+ev.round});
+        SESS.push({sid, d, allDay:!!x.allDay, url:x.url||"", evUrl:ev.url||"", label:x.label, key:!!x.race, ev:ev.name, place:ev.place||"", round:ev.round, season:ev.season, evKey:sid+"|"+ev.season+"|"+ev.round});
       }
     }
   }
@@ -350,7 +382,7 @@ function renderAgenda(){
   h += `<div class="sub">${list.length} session${list.length>1?"s":""} · ${esc(tzName.replace(/_/g," "))}</div>`;
   for(const ss of groups.values()){
     const s0=ss[0], sr=SBY[s0.sid];
-    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${icon(sr)}${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small>${sr.r&&ss.some(x=>status(x,now)==="done")?`<a class="res" href="${esc(s0.evUrl||sr.r.replace("{Y}",s0.d.getFullYear()))}" target="_blank" rel="noopener">Results &#8599;</a>`:""}${sr.stale?`<em class="stale">May be outdated: couldn't refresh since ${sr.updated?fmtShort.format(sr.updated):"recently"}</em>`:""}</div><ul class="ss">`;
+    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><button type="button" class="pill tap" data-season="${sr.id}" aria-label="${esc(sr.name)} full season">${icon(sr)}${esc(sr.name)}</button><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small>${sr.r&&ss.some(x=>status(x,now)==="done")?`<a class="res" href="${esc(s0.evUrl||sr.r.replace("{Y}",s0.d.getFullYear()))}" target="_blank" rel="noopener">Results &#8599;</a>`:""}${sr.stale?`<em class="stale">May be outdated: couldn't refresh since ${sr.updated?fmtShort.format(sr.updated):"recently"}</em>`:""}</div><ul class="ss">`;
     for(const s of ss){
       const st = status(s,now);
       const stTxt = st==="live"?(s.allDay?"Today":"Live"):st==="done"?"Done":until(s,now);
@@ -380,11 +412,15 @@ document.getElementById("close").onclick=closeSheet;
 document.getElementById("scrim").addEventListener("click",e=>{ if(e.target.id==="scrim") closeSheet(); });
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape" && !document.getElementById("scrim").hidden) return closeSheet();
+  if(e.key==="Escape" && !document.getElementById("season").hidden) return history.back();
   if(e.target.closest("input,textarea")) return;
   if(e.key==="ArrowLeft"&&e.altKey) shift(-1); if(e.key==="ArrowRight"&&e.altKey) shift(1);
 });
 document.getElementById("grid").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(b) goto(b.dataset.day); });
-document.getElementById("agenda").addEventListener("click",e=>{ const b=e.target.closest("[data-jump]"); if(b) goto(b.dataset.jump); });
+document.getElementById("agenda").addEventListener("click",e=>{
+  const p=e.target.closest("[data-season]"); if(p) return openSeason(p.dataset.season);
+  const b=e.target.closest("[data-jump]"); if(b) goto(b.dataset.jump);
+});
 document.getElementById("next").addEventListener("click",e=>{ const b=e.target.closest(".nrow"); if(b) goto(b.dataset.day); });
 document.getElementById("prev").onclick=()=>shift(-1);
 document.getElementById("nextm").onclick=()=>shift(1);
@@ -394,6 +430,66 @@ let sx=null, sy=null;
 const g=document.getElementById("grid");
 g.addEventListener("touchstart",e=>{sx=e.touches[0].clientX; sy=e.touches[0].clientY},{passive:true});
 g.addEventListener("touchend",e=>{ if(sx==null) return; const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy; if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5) shift(dx<0?1:-1); sx=null; },{passive:true});
+// Season view: a full-screen page per series, opened from a race card's series pill or the Seasons button.
+// Uses browser history so the phone's back gesture closes it.
+const SV = {sid:null, year:null};
+const fmtDM = new Intl.DateTimeFormat(undefined,{day:"numeric",month:"short"});
+function seasonEvents(sid){
+  const m=new Map();
+  for(const s of SESS){ if(s.sid!==sid) continue; if(!m.has(s.evKey)) m.set(s.evKey,[]); m.get(s.evKey).push(s); }
+  return [...m.values()];
+}
+function renderPicker(){
+  document.getElementById("season-h").textContent="Seasons";
+  document.getElementById("yrs").innerHTML="";
+  const order=[...SERIES.filter(s=>fav.has(s.id)), ...SERIES.filter(s=>!fav.has(s.id))].filter(s=>!s.nodata);
+  document.getElementById("sbody").innerHTML=order.map(s=>`<button type="button" class="row" style="--c:${s.c}" data-season="${s.id}"><i></i><span><b>${icon(s)} ${esc(s.name)}</b><small>${esc(s.full)}</small></span><em class="tg" style="font-size:22px">&#8250;</em></button>`).join("");
+}
+function renderSeason(){
+  const now=new Date(), sr=SBY[SV.sid];
+  const all=seasonEvents(SV.sid);
+  const years=[...new Set(all.map(ss=>ss[0].season))].sort();
+  if(!years.includes(SV.year)){
+    const nx=all.find(ss=>ss.some(s=>status(s,now)!=="done"));
+    SV.year = nx ? nx[0].season : years[years.length-1];
+  }
+  document.getElementById("season-h").innerHTML=`${esc(sr.name)} <small>${esc(sr.full)}</small>`;
+  document.getElementById("yrs").innerHTML=years.length>1?years.map(y=>`<button type="button" data-year="${y}" aria-pressed="${y===SV.year}">${y}</button>`).join(""):"";
+  const evs=all.filter(ss=>ss[0].season===SV.year);
+  let nextDone=false, h="";
+  for(const ss of evs){
+    const s0=ss[0], sN=ss[ss.length-1];
+    const sts=ss.map(s=>status(s,now));
+    const live=sts.includes("live"), past=sts.every(x=>x==="done");
+    const isNext=!past && !nextDone; if(isNext) nextDone=true;
+    const dates = ymd(s0.d)===ymd(sN.d) ? fmtDM.format(s0.d) : (fmtDM.formatRange ? fmtDM.formatRange(s0.d,sN.d) : `${fmtDM.format(s0.d)} – ${fmtDM.format(sN.d)}`);
+    const tag = live?"On now":isNext?"Next":past?"Done":"";
+    const res = sr.r && sts.includes("done") ? `<a class="res" href="${esc(s0.evUrl||sr.r.replace("{Y}",s0.d.getFullYear()))}" target="_blank" rel="noopener">Results &#8599;</a>` : "";
+    const rows = ss.map((s,i)=>{
+      const st=sts[i], stTxt=st==="live"?(s.allDay?"Today":"Live"):st==="done"?"Done":until(s,now);
+      return `<li class="${s.key?"key":""} ${st==="done"?"done":""}"><time datetime="${s.allDay?ymd(s.d):s.d.toISOString()}">${s.allDay?fmtShort.format(s.d).replace(/,.*/,""):tm(s)}</time><span class="nm">${esc(s.label)}${s.allDay?"":` <small style="color:var(--muted)">${fmtShort.format(s.d)}</small>`}${st==="done"&&s.url?` <a class="sres" href="${esc(s.url)}" target="_blank" rel="noopener">Results</a>`:""}</span><span class="st ${st==="live"?"live":""}">${stTxt}</span></li>`;
+    }).join("");
+    h += `<details class="rnd${past?" past":""}${isNext?" nx":""}${live?" lv":""}" style="--c:${sr.c}"${isNext||live?" open":""}><summary><span class="rn">R${s0.round}</span><span class="rt"><b>${esc(s0.ev)}</b>${s0.place?`<small>${esc(s0.place)}</small>`:""}</span><span class="rd">${dates}${tag?`<small>${tag}</small>`:""}</span></summary><div class="body"><ul class="ss">${rows}</ul>${res}</div></details>`;
+  }
+  document.getElementById("sbody").innerHTML = h || `<div class="empty"><b>No races</b>No schedule for ${SV.year} yet.</div>`;
+}
+function showSeason(state){
+  const el=document.getElementById("season");
+  if(!state || !state.pw){ el.hidden=true; document.documentElement.style.overflow=""; SV.sid=null; return; }
+  el.hidden=false; document.documentElement.style.overflow="hidden";
+  if(state.pw==="list"){ SV.sid=null; renderPicker(); el.scrollTop=0; return; }
+  if(SV.sid!==state.sid){ SV.sid=state.sid; SV.year=null; }
+  renderSeason();
+  const t=el.querySelector(".rnd.lv,.rnd.nx");
+  el.scrollTop = t ? Math.max(0, t.offsetTop-90) : 0;
+}
+function openSeason(sid){ const st={pw:"season",sid}; history.pushState(st,""); showSeason(st); }
+document.getElementById("seasons").onclick=()=>{ const st={pw:"list"}; history.pushState(st,""); showSeason(st); };
+document.getElementById("sback").onclick=()=>history.back();
+addEventListener("popstate",e=>showSeason(e.state));
+document.getElementById("sbody").addEventListener("click",e=>{ const b=e.target.closest("button[data-season]"); if(b) openSeason(b.dataset.season); });
+document.getElementById("yrs").addEventListener("click",e=>{ const b=e.target.closest("[data-year]"); if(!b) return; SV.year=+b.dataset.year; renderSeason(); document.getElementById("season").scrollTop=0; });
+if(history.state && history.state.pw) history.replaceState(null,"");
 const fmtUpd = new Intl.DateTimeFormat(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
 function renderFoot(){
   document.getElementById("foot").textContent = (GENERATED?"Schedules updated "+fmtUpd.format(GENERATED)+". ":"")+"Refreshed daily. Times shown in your device's timezone.";
@@ -415,7 +511,7 @@ boot();
 (()=>{
   const el=document.getElementById("ptr"); let y0=null, dy=0;
   const off=()=>{el.style.opacity=0; el.style.transform="translate(-50%,-48px)";};
-  addEventListener("touchstart",e=>{ y0=(scrollY<=0 && document.getElementById("scrim").hidden)?e.touches[0].clientY:null; dy=0; },{passive:true});
+  addEventListener("touchstart",e=>{ y0=(scrollY<=0 && document.getElementById("scrim").hidden && document.getElementById("season").hidden)?e.touches[0].clientY:null; dy=0; },{passive:true});
   addEventListener("touchmove",e=>{
     if(y0==null) return; dy=e.touches[0].clientY-y0;
     if(dy<=0||scrollY>0){off();return}
@@ -436,7 +532,7 @@ if("serviceWorker" in navigator){
   addEventListener("load",()=>navigator.serviceWorker.register("sw.js").then(r=>r.update()).catch(()=>{}));
   document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{}); });
 }
-setInterval(()=>{renderNext(); renderAgenda();}, 60000);
+setInterval(()=>{renderNext(); renderAgenda(); if(!document.getElementById("season").hidden && SV.sid) renderSeason();}, 60000);
 </script>
 </body>
 </html>
