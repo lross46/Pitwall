@@ -98,7 +98,8 @@ async function dorna(acronym) {
         .sort((a, b) => a.start.localeCompare(b.start));
       if (!sessions.length) return;
       const nm = (e.name || e.shortname || "").replace(/\s+/g, " ").trim();
-      events.push({ name: titleCase(nm), place: e.circuit?.name || "", round: i + 1, season: y, sessions });
+      const url = code ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/RAC/Classification` : undefined;
+      events.push({ name: titleCase(nm), place: e.circuit?.name || "", round: i + 1, season: y, url, sessions });
     });
   }
   if (!events.length) {
@@ -606,6 +607,8 @@ for (const [id, fn] of Object.entries(SOURCES)) {
     series[id] = { updated: now.toISOString(), events };
     const linked = events.filter((e) => e.url).length, sLinked = events.reduce((n, e) => n + e.sessions.filter((s) => s.url).length, 0);
     console.log(`ok   ${id}: ${events.length} events, ${events.reduce((n, e) => n + e.sessions.length, 0)} sessions, results links: ${linked} events/${sLinked} sessions`);
+    const sample = events.find((e) => e.url);
+    if (sample) console.log(`       link: R${sample.round} ${sample.name} -> ${sample.url}`);
     const next = events.find((e) => e.sessions.some((s) => s.start > now.toISOString()));
     if (next) console.log(`       next: ${next.name} (${next.place}) · ${next.sessions.map((s) => `${s.label}${s.race ? "*" : ""} ${s.start.slice(5, 16)}`).join(" | ")}`);
   } catch (e) {
