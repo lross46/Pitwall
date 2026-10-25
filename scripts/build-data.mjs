@@ -110,7 +110,13 @@ async function dorna(acronym) {
   return events;
 }
 function titleCase(s) {
-  return s === s.toUpperCase() ? s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase()).replace(/\bGp\b/g, "GP").replace(/\b(Of|De|Del|Di)\b/g, (w) => w.toLowerCase()) : s;
+  if (s !== s.toUpperCase()) return s;
+  // Keep short sponsor acronyms (e.g. "PT Grand Prix of Thailand") and "GP" in capitals.
+  return s.split(" ").map((w, i) => {
+    if (i > 0 && /^(OF|DE|DEL|DI|THE)$/.test(w)) return w.toLowerCase();
+    if (w === "GP" || (i === 0 && /^[A-Z]{2}$/.test(w))) return w;
+    return w.toLowerCase().replace(/(^|[-'])\p{L}/gu, (c) => c.toUpperCase());
+  }).join(" ");
 }
 
 // ---- ACO sites: FIA WEC and ELMS (schema.org JSON-LD on each race page)
@@ -445,7 +451,7 @@ async function superformula() {
       }
       if (!sessions.length) continue;
       sessions.sort((a, b) => a.start.localeCompare(b.start));
-      const m = title.match(/Rd\.([\d.&\s]+?)\s+(.+)$/) || [];
+      const m = title.match(/Rd\.([\d.&\s-]+?)\s+(.+)$/) || [];
       const round = +(String(m[1] || "").match(/\d+/) || [events.length + 1])[0];
       const venue = titleCase((m[2] || title).trim());
       events.push({ name: venue, place: venue, round, season: y, url, sessions });
