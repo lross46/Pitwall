@@ -13,7 +13,7 @@ A phone-first motorsport calendar. Pick your series, see the month at a glance, 
 | Series | Source |
 |---|---|
 | F1, F2, F3, MotoGP, IndyCar, Formula E, F1 Academy | [sportstimes/f1](https://github.com/sportstimes/f1) community data |
-| Moto2, Moto3, MotoE | Official MotoGP API (`api.pulselive.motogp.com`) |
+| Moto2, Moto3 | Official MotoGP API (`api.pulselive.motogp.com`) |
 | WEC, ELMS | fiawec.com / europeanlemansseries.com race pages (schema.org data) |
 | GT World Challenge Europe | gt-world-challenge-europe.com event timetables |
 | NASCAR Cup, NASCAR O'Reilly | NASCAR public schedule feed (`cf.nascar.com`) |

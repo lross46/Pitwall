@@ -257,6 +257,8 @@ async function supercars() {
     } catch (e) { if (!tab) throw e; }
   }
   const events = [];
+  const seriesSeen = new Set();
+  console.log(`     supercars: ${slugs.size} event pages`);
   for (const slug of [...slugs].sort()) {
     let page;
     try { page = (await getText(`https://www.supercars.com/events/${slug}/schedule`)).replace(/\\"/g, '"'); } catch { continue; }
@@ -265,6 +267,7 @@ async function supercars() {
     const seen = new Set();
     for (const m of page.matchAll(/"name":"([^"]+)","startDate":"([^"]+)","type":"([^"]*)","natsoftEventCode":(?:null|"[^"]*"),"season":\{[^}]*\},"series":\{"name":"([^"]+)"/g)) {
       const [, label, startDate, type, series] = m;
+      seriesSeen.add(series);
       if (!/supercars/i.test(series) || /super\s*[23]|super2|super3/i.test(series)) continue;
       if (!/practice|qualif|shootout|race|top ?10|warm/i.test(type + " " + label)) continue;
       const start = iso(startDate);
@@ -276,6 +279,7 @@ async function supercars() {
     sessions.sort((a, b) => a.start.localeCompare(b.start));
     events.push({ name, place: "", round: events.length + 1, season: +slug.slice(0, 4), sessions });
   }
+  console.log(`     supercars series seen: ${[...seriesSeen].join(", ")}`);
   if (!events.length) throw new Error("no Supercars events parsed");
   return events;
 }
@@ -423,7 +427,6 @@ const SOURCES = {
   nascar: () => nascar("series_1"),
   "nascar-oreilly": () => nascar("series_2"),
   elms: () => aco("https://www.europeanlemansseries.com"),
-  motoe: () => dorna("MTE"),
   indynxt: () => indynxt(),
   supercars: () => supercars(),
   wrc: () => wrc(),
