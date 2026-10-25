@@ -203,6 +203,188 @@ async function sro(base) {
   return events;
 }
 
+// ---- Time zone helper: wall-clock time in an IANA zone -> UTC Date
+function zonedToUtc(y, mo, d, h, mi, tz) {
+  const guess = Date.UTC(y, mo, d, h, mi);
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, hourCycle: "h23", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" })
+    .formatToParts(new Date(guess)).map((p) => [p.type, +p.value]));
+  const asZone = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
+  return new Date(guess - (asZone - guess));
+}
+
+// ---- Indy NXT official site (server-rendered weekend schedule on each event page)
+async function indynxt() {
+  const events = [];
+  for (const y of YEARS) {
+    let html;
+    try { html = await getText(`https://www.indynxt.com/schedule?year=${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    const urls = [...new Set([...html.matchAll(new RegExp(`https://www\\.indynxt\\.com/Schedule/${y}/[A-Za-z0-9-]+`, "g"))].map((m) => m[0]))];
+    let round = 0;
+    for (const url of urls) {
+      round++;
+      let page;
+      try { page = await getText(url); } catch { continue; }
+      const name = strip((page.match(/<title[^>]*>([^<|]*)/) || [])[1] || url.split("/").pop());
+      const table = page.split('class="schedule-table"')[1] || "";
+      const sessions = [];
+      let day = null;
+      for (const chunk of table.split(/(?=<h3>)|(?=class="schedule-entry")/)) {
+        const h = chunk.match(/^<h3>[A-Za-z]+,\s*([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2})<\/h3>/);
+        if (h) { day = { mon: MONTHS[h[1].toLowerCase()], d: +h[2] }; continue; }
+        if (!day || day.mon == null) continue;
+        const tm = chunk.match(/class="schedule-time">\s*(\d{1,2}):(\d{2})\s*([AP]M)\s*ET/i);
+        const desc = strip((chunk.match(/class="schedule-description">([\s\S]*?)<\/div>/) || [])[1] || "");
+        if (!tm || !/indy\s*nxt/i.test(desc)) continue;
+        let hh = +tm[1] % 12; if (/pm/i.test(tm[3])) hh += 12;
+        const label = desc.replace(/^INDY NXT\s*-\s*/i, "").trim();
+        sessions.push({ label, start: zonedToUtc(y, day.mon, day.d, hh, +tm[2], "America/New_York").toISOString(), race: /^race/i.test(label) });
+      }
+      if (!sessions.length) continue;
+      events.push({ name: name.replace(/\s*-\s*INDY NXT.*$/i, "").trim(), place: "", round, season: y, sessions });
+    }
+  }
+  if (!events.length) throw new Error("no Indy NXT events parsed");
+  return events;
+}
+
+// ---- Supercars official site (session list embedded in each event's schedule page)
+async function supercars() {
+  const slugs = new Set();
+  for (const tab of ["", "?tab=PAST"]) {
+    try {
+      const html = await getText(`https://www.supercars.com/calendar${tab}`);
+      for (const m of html.matchAll(/\/events\/(20\d\d-[a-z0-9-]+)/g)) if (YEARS.includes(+m[1].slice(0, 4))) slugs.add(m[1]);
+    } catch (e) { if (!tab) throw e; }
+  }
+  const events = [];
+  for (const slug of [...slugs].sort()) {
+    let page;
+    try { page = (await getText(`https://www.supercars.com/events/${slug}/schedule`)).replace(/\\"/g, '"'); } catch { continue; }
+    const name = strip((page.match(/<title[^>]*>([^<|]*)/) || [])[1] || slug).replace(/\s*Schedule\s*$/i, "").trim();
+    const sessions = [];
+    const seen = new Set();
+    for (const m of page.matchAll(/"name":"([^"]+)","startDate":"([^"]+)","type":"([^"]*)","natsoftEventCode":(?:null|"[^"]*"),"season":\{[^}]*\},"series":\{"name":"([^"]+)"/g)) {
+      const [, label, startDate, type, series] = m;
+      if (!/supercars/i.test(series) || /super\s*[23]|super2|super3/i.test(series)) continue;
+      if (!/practice|qualif|shootout|race|top ?10|warm/i.test(type + " " + label)) continue;
+      const start = iso(startDate);
+      if (!start || seen.has(start + label)) continue;
+      seen.add(start + label);
+      sessions.push({ label, start, race: /^race/i.test(type) || /^race/i.test(label) });
+    }
+    if (!sessions.length) continue;
+    sessions.sort((a, b) => a.start.localeCompare(b.start));
+    events.push({ name, place: "", round: events.length + 1, season: +slug.slice(0, 4), sessions });
+  }
+  if (!events.length) throw new Error("no Supercars events parsed");
+  return events;
+}
+
+// ---- WRC official calendar (rally start time and date range; stage times aren't published in a readable form)
+async function wrc() {
+  const events = [];
+  for (const y of YEARS) {
+    let html;
+    try { html = await getText(`https://www.wrc.com/en/calendar/wrc-${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    const cards = html.split(/(?=href="\/en\/events\/)/).slice(1);
+    let round = 0;
+    const seen = new Set();
+    for (const c of cards) {
+      const slug = (c.match(/^href="\/en\/events\/([a-z0-9-]+)"/) || [])[1];
+      const dt = (c.match(/<time[^>]*datetime="([^"]+)"[^>]*>([^<]*)<\/time>/) || []);
+      if (!slug || !dt[1] || seen.has(slug) || !slug.endsWith(String(y))) continue;
+      seen.add(slug);
+      round++;
+      const start = new Date(dt[1]);
+      const off = (dt[1].match(/([+-])(\d\d):(\d\d)$/) || []);
+      const offMin = off.length ? (off[1] === "-" ? -1 : 1) * (+off[2] * 60 + +off[3]) : 0;
+      const endDay = +((dt[2].match(/(\d{1,2})\s+[A-Za-z]+\s+20\d\d\s*$/) || [])[1] || 0);
+      const name = slug.replace(/^wrc-/, "").replace(/-20\d\d$/, "").split("-").map((w) => w[0].toUpperCase() + w.slice(1)).join(" ");
+      const sessions = [{ label: "Rally starts", start: start.toISOString(), race: false }];
+      // One all-day entry per remaining rally day, anchored to local noon.
+      const local = new Date(start.getTime() + offMin * 60000);
+      for (let i = 1; i <= 4; i++) {
+        const d = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() + i, 12) - offMin * 60000);
+        const dLocal = new Date(d.getTime() + offMin * 60000).getUTCDate();
+        sessions.push({ label: `Rally day ${i + 1}`, start: d.toISOString(), race: dLocal === endDay, allDay: true });
+        if (dLocal === endDay || !endDay) break;
+      }
+      events.push({ name, place: "", round, season: y, sessions });
+    }
+  }
+  if (!events.length) throw new Error("no WRC events parsed");
+  return events;
+}
+
+// ---- Wikipedia season articles (race dates only) for series whose official sites
+// block automated access or don't publish session times in a readable form.
+const MONTH_NAMES = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+async function wikiRaw(title, depth = 0) {
+  const txt = await getText(`https://en.wikipedia.org/w/index.php?title=${encodeURIComponent(title.replace(/ /g, "_"))}&action=raw`);
+  const redirect = txt.match(/^#REDIRECT\s*\[\[([^\]|#]+)/i);
+  return redirect && depth < 2 ? wikiRaw(redirect[1], depth + 1) : txt;
+}
+function wikiDates(cell, year) {
+  const c = cell.replace(/&nbsp;/g, " ").replace(/\{\{nowrap\|([^}]*)\}\}/gi, "$1");
+  const mo = "(january|february|march|april|may|june|july|august|september|october|november|december)";
+  let m = c.match(new RegExp(`(\\d{1,2})\\s*${mo}?\\s*[–-]\\s*(\\d{1,2})\\s+${mo}`, "i")); // "18–19 April", "30 April–1 May"
+  if (m) {
+    const m2 = MONTH_NAMES.indexOf(m[4].toLowerCase()), m1 = m[2] ? MONTH_NAMES.indexOf(m[2].toLowerCase()) : m2;
+    return [[m1, +m[1]], [m2, +m[3]]];
+  }
+  m = c.match(new RegExp(`${mo}\\s+(\\d{1,2})\\s*[–-]\\s*(?:${mo}\\s+)?(\\d{1,2})`, "i")); // "January 24–25"
+  if (m) {
+    const m1 = MONTH_NAMES.indexOf(m[1].toLowerCase()), m2 = m[3] ? MONTH_NAMES.indexOf(m[3].toLowerCase()) : m1;
+    return [[m1, +m[2]], [m2, +m[4]]];
+  }
+  m = c.match(new RegExp(`(\\d{1,2})\\s+${mo}|${mo}\\s+(\\d{1,2})`, "i"));
+  if (m) return m[1] ? [[MONTH_NAMES.indexOf(m[2].toLowerCase()), +m[1]]] : [[MONTH_NAMES.indexOf(m[3].toLowerCase()), +m[4]]];
+  return null;
+}
+async function wiki(titleFor) {
+  const events = [];
+  for (const y of YEARS) {
+    let txt;
+    try { txt = await wikiRaw(titleFor(y)); } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    const sec = txt.split(/\n==\s*(?:Race calendar|Calendar|Schedule)[^=\n]*==/i)[1];
+    if (!sec) { if (y === YEARS[0]) throw new Error(`no calendar section in ${titleFor(y)}`); continue; }
+    const table = (sec.match(/\{\|[\s\S]*?\n\|\}/) || [])[0] || "";
+    const days = []; // {circuit, date}
+    let lastCircuit = "";
+    for (const row of table.split(/\n\|-/).slice(1)) {
+      const links = [...row.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)]
+        .map((l) => ({ target: l[1], text: (l[2] || l[1]).trim() }))
+        .filter((l) => !/^(File|Image):/i.test(l.target) && !/championship|series|grand prix\b$/i.test(l.target) || /circuit|raceway|speedway|park|ring|international|autodromo|motorsport|street/i.test(l.target));
+      const circuit = (links.find((l) => /circuit|raceway|speedway|park|ring|autodromo|motegi|suzuka|fuji|sugo|autopolis|knockhill|thruxton|croft|silverstone|brands|snetterton|donington|daytona|sebring|laguna|watkins|lime rock|road america|road atlanta|indianapolis|detroit|long beach|island|assen|aragón|aragon|jerez|estoril|portim|misano|most|cremona|magny|balaton|imola|zandvoort|spa|hockenheim|nürburgring|nurburgring|lausitz|sachsenring|norisring|oschersleben|salzburg|red bull/i.test(l.target + " " + l.text)) || {}).text || "";
+      if (circuit) lastCircuit = circuit;
+      const cells = row.split(/\n[|!]|\|\|/);
+      let dates = null;
+      for (const cell of cells) { if (/\[\[|\{\{flag/i.test(cell) && !/\d{1,2}\s*[A-Z]/.test(cell)) continue; dates = wikiDates(cell.replace(/<ref[\s\S]*?(<\/ref>|\/>)/g, ""), y); if (dates) break; }
+      if (!dates || !(circuit || lastCircuit)) continue;
+      const [[m1, d1], [m2, d2] = [m1, d1]] = dates;
+      if (m1 < 0 || m2 < 0) continue;
+      for (let dt = Date.UTC(y, m1, d1); dt <= Date.UTC(y, m2, d2); dt += 864e5) days.push({ circuit: circuit || lastCircuit, date: dt });
+    }
+    // Group consecutive days at the same circuit into one race weekend.
+    days.sort((a, b) => a.date - b.date);
+    const seen = new Set();
+    let cur = null, round = 0;
+    for (const d of days) {
+      if (seen.has(d.date)) continue;
+      seen.add(d.date);
+      if (!cur || cur.circuit !== d.circuit || d.date - cur.last > 3 * 864e5) {
+        cur = { circuit: d.circuit, last: d.date, ev: { name: d.circuit, place: "", round: ++round, season: y, sessions: [] } };
+        events.push(cur.ev);
+      }
+      cur.last = d.date;
+      cur.ev.sessions.push({ label: "Race weekend", start: new Date(d.date + 12 * 36e5).toISOString(), race: false, allDay: true });
+    }
+  }
+  for (const e of events) { const last = e.sessions.at(-1); last.race = true; last.label = e.sessions.length > 1 ? "Race day" : "Race day"; }
+  if (!events.length) throw new Error("no dates parsed from Wikipedia");
+  return events;
+}
+
 // ---- NASCAR public schedule feed
 async function nascar(seriesKey) {
   const events = [];
@@ -242,6 +424,14 @@ const SOURCES = {
   "nascar-oreilly": () => nascar("series_2"),
   elms: () => aco("https://www.europeanlemansseries.com"),
   motoe: () => dorna("MTE"),
+  indynxt: () => indynxt(),
+  supercars: () => supercars(),
+  wrc: () => wrc(),
+  wsbk: () => wiki((y) => `${y} Superbike World Championship`),
+  imsa: () => wiki((y) => `${y} IMSA SportsCar Championship`),
+  btcc: () => wiki((y) => `${y} British Touring Car Championship`),
+  dtm: () => wiki((y) => `${y} DTM`),
+  superformula: () => wiki((y) => `${y} Super Formula Championship`),
 };
 
 let previous = {};

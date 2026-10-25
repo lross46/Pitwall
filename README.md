@@ -13,8 +13,15 @@ A phone-first motorsport calendar. Pick your series, see the month at a glance, 
 | Series | Source |
 |---|---|
 | F1, F2, F3, MotoGP, IndyCar, Formula E, F1 Academy | [sportstimes/f1](https://github.com/sportstimes/f1) community data |
-| Moto2, Moto3 | Official MotoGP API (`api.pulselive.motogp.com`) |
-| WEC | fiawec.com race pages (schema.org data) |
-| NASCAR Cup | NASCAR public schedule feed (`cf.nascar.com`) |
+| Moto2, Moto3, MotoE | Official MotoGP API (`api.pulselive.motogp.com`) |
+| WEC, ELMS | fiawec.com / europeanlemansseries.com race pages (schema.org data) |
+| GT World Challenge Europe | gt-world-challenge-europe.com event timetables |
+| NASCAR Cup, NASCAR O'Reilly | NASCAR public schedule feed (`cf.nascar.com`) |
+| Indy NXT | indynxt.com event schedules |
+| Supercars | supercars.com event schedules |
+| WRC | wrc.com calendar (start time, then rally days) |
+| WorldSBK, IMSA, BTCC, DTM, Super Formula | Wikipedia season articles (dates only, no session times) |
+
+If any source fails, the series keeps its last schedule, the app marks it "may be outdated", and the daily run fails so GitHub emails the repo owner.
 
 Run locally: `node scripts/build-data.mjs`, then serve `site/` with any static server.

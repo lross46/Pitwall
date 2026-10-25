@@ -38,8 +38,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 /* next up */
-.next{background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border:0;text-align:left;width:100%}
-.next .lbl{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;opacity:.7;grid-column:1/-1}
+.next{background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 14px;display:grid;gap:2px}
+.next .lbl{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;opacity:.7}
+.nrow{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border:0;background:none;color:inherit;text-align:left;width:100%;padding:6px 0}
+.nrow + .nrow{border-top:1px solid color-mix(in srgb,var(--bg) 18%,transparent)}
 .next .what{min-width:0}
 .next .what b{font-family:var(--f-display);font-size:20px;font-weight:600;display:block;line-height:1.1;overflow-wrap:anywhere}
 .next .what small{opacity:.75;font-size:13px}
@@ -129,6 +131,10 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .foot{color:var(--muted);font-size:12px}
 @media (prefers-reduced-motion:no-preference){.day,.chip,.row{transition:background .15s,border-color .15s}}
 .loading{color:var(--muted);padding:18px 0}
+.ic{width:2em;height:1em;fill:currentColor;flex:none;vertical-align:-.05em}
+.pill{display:inline-flex;align-items:center;gap:4px}
+.row span b .ic{margin-right:2px}
+.res{margin-left:auto;font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;white-space:nowrap}
 .stale{width:100%;font-style:normal;font-size:12px;font-weight:600;color:var(--accent)}
 </style>
 </head>
@@ -139,7 +145,7 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
     <h1>Pit Wall<span>.</span></h1>
     <div class="tz" id="tz"></div>
   </header>
-  <button class="next" id="next" type="button" hidden></button>
+  <section class="next" id="next" aria-live="polite" hidden></section>
   <div class="chips" id="chips" role="toolbar" aria-label="Series"></div>
   <div class="main">
     <section class="panel cal" aria-label="Month calendar">
@@ -167,30 +173,37 @@ button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
 <script>
 const SERIES = [
-  {id:"f1", name:"F1", full:"Formula 1", c:"#E10600", main:true},
-  {id:"f2", name:"F2", full:"Formula 2", c:"#1D78D6", main:true},
-  {id:"f3", name:"F3", full:"Formula 3", c:"#D11F7A", main:true},
-  {id:"motogp", name:"MotoGP", full:"MotoGP", c:"#E08C00", main:true},
-  {id:"moto2", name:"Moto2", full:"Moto2", c:"#B5651D", main:true},
-  {id:"moto3", name:"Moto3", full:"Moto3", c:"#8F5A2A", main:true},
-  {id:"wec", name:"WEC", full:"FIA World Endurance", c:"#0E8F7E", main:true},
-  {id:"indycar", name:"IndyCar", full:"NTT IndyCar Series", c:"#5B45C9", main:true},
-  {id:"wsbk", name:"WorldSBK", full:"FIM Superbike World Championship", c:"#B3122B", main:true},
-  {id:"gtwce", name:"GTWC Europe", full:"GT World Challenge Europe", c:"#2F8A3B", main:true},
-  {id:"fe", name:"Formula E", full:"ABB FIA Formula E", c:"#0093A8"},
-  {id:"f1-academy", name:"F1 Academy", full:"F1 Academy", c:"#C2508C"},
-  {id:"motoe", name:"MotoE", full:"FIM MotoE World Championship", c:"#3BA55C"},
-  {id:"elms", name:"ELMS", full:"European Le Mans Series", c:"#1C6E8C"},
-  {id:"imsa", name:"IMSA", full:"IMSA WeatherTech SportsCar Championship", c:"#4A5BA8"},
-  {id:"nascar", name:"NASCAR", full:"NASCAR Cup Series", c:"#C9A100"},
-  {id:"nascar-oreilly", name:"NASCAR O'Reilly", full:"NASCAR O'Reilly Auto Parts Series", c:"#A8862B"},
-  {id:"indynxt", name:"Indy NXT", full:"Indy NXT", c:"#6F7FA0"},
-  {id:"wrc", name:"WRC", full:"FIA World Rally Championship", c:"#D4651A"},
-  {id:"dtm", name:"DTM", full:"DTM", c:"#5C6670"},
-  {id:"btcc", name:"BTCC", full:"British Touring Car Championship", c:"#2E5FA8"},
-  {id:"supercars", name:"Supercars", full:"Repco Supercars Championship", c:"#B8452E"},
-  {id:"superformula", name:"Super Formula", full:"Super Formula", c:"#8A3FA0"},
+  {id:"f1", name:"F1", full:"Formula 1", c:"#E10600", main:true, kind:"formula", r:"https://www.formula1.com/en/results"},
+  {id:"f2", name:"F2", full:"Formula 2", c:"#1D78D6", main:true, kind:"formula", r:"https://www.fiaformula2.com/Calendar"},
+  {id:"f3", name:"F3", full:"Formula 3", c:"#D11F7A", main:true, kind:"formula", r:"https://www.fiaformula3.com/Calendar"},
+  {id:"motogp", name:"MotoGP", full:"MotoGP", c:"#E08C00", main:true, kind:"bike", r:"https://www.motogp.com/en/gp-results"},
+  {id:"moto2", name:"Moto2", full:"Moto2", c:"#B5651D", main:true, kind:"bike", r:"https://www.motogp.com/en/gp-results"},
+  {id:"moto3", name:"Moto3", full:"Moto3", c:"#8F5A2A", main:true, kind:"bike", r:"https://www.motogp.com/en/gp-results"},
+  {id:"wec", name:"WEC", full:"FIA World Endurance", c:"#0E8F7E", main:true, kind:"car", r:"https://www.fiawec.com/en/season/{Y}"},
+  {id:"indycar", name:"IndyCar", full:"NTT IndyCar Series", c:"#5B45C9", main:true, kind:"formula", r:"https://www.indycar.com/results"},
+  {id:"wsbk", name:"WorldSBK", full:"FIM Superbike World Championship", c:"#B3122B", main:true, kind:"bike", r:"https://www.worldsbk.com/en/results"},
+  {id:"gtwce", name:"GTWC Europe", full:"GT World Challenge Europe", c:"#2F8A3B", main:true, kind:"car", r:"https://www.gt-world-challenge-europe.com/results"},
+  {id:"fe", name:"Formula E", full:"ABB FIA Formula E", c:"#0093A8", kind:"formula", r:"https://www.fiaformulae.com/en/results"},
+  {id:"f1-academy", name:"F1 Academy", full:"F1 Academy", c:"#C2508C", kind:"formula", r:"https://www.f1academy.com/Racing-Series/Calendar"},
+  {id:"motoe", name:"MotoE", full:"FIM MotoE World Championship", c:"#3BA55C", kind:"bike", r:"https://www.motogp.com/en/gp-results"},
+  {id:"elms", name:"ELMS", full:"European Le Mans Series", c:"#1C6E8C", kind:"car", r:"https://www.europeanlemansseries.com/en/season/{Y}"},
+  {id:"imsa", name:"IMSA", full:"IMSA WeatherTech SportsCar Championship", c:"#4A5BA8", kind:"car", r:"https://www.imsa.com/weathertech/"},
+  {id:"nascar", name:"NASCAR", full:"NASCAR Cup Series", c:"#C9A100", kind:"car", r:"https://www.nascar.com/results/racing_results/"},
+  {id:"nascar-oreilly", name:"NASCAR O'Reilly", full:"NASCAR O'Reilly Auto Parts Series", c:"#A8862B", kind:"car", r:"https://www.nascar.com/results/racing_results/"},
+  {id:"indynxt", name:"Indy NXT", full:"Indy NXT", c:"#6F7FA0", kind:"formula", r:"https://www.indynxt.com/results"},
+  {id:"wrc", name:"WRC", full:"FIA World Rally Championship", c:"#D4651A", kind:"rally", r:"https://www.wrc.com/en/calendar/wrc-{Y}"},
+  {id:"dtm", name:"DTM", full:"DTM", c:"#5C6670", kind:"car", r:"https://www.dtm.com/en/results"},
+  {id:"btcc", name:"BTCC", full:"British Touring Car Championship", c:"#2E5FA8", kind:"car", r:"https://www.btcc.net/results/"},
+  {id:"supercars", name:"Supercars", full:"Repco Supercars Championship", c:"#B8452E", kind:"car", r:"https://www.supercars.com/results"},
+  {id:"superformula", name:"Super Formula", full:"Super Formula", c:"#8A3FA0", kind:"formula", r:"https://superformula.net/"},
 ];
+const ICONS = {
+  formula:'<svg class="ic" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 10.2 9 9l3.2-2.4h5.6l1.4-2h2.6v3.2h5.4l1.6 2.4H24.8a3.6 3.6 0 0 0-7 .8h-4.6a3.4 3.4 0 0 0-6.6-.4z"/><path d="M26.5 2.6h4.3v1.8h-1.4v3.4h-1.3V4.4h-1.6z"/><circle cx="9.9" cy="11.6" r="2.7"/><circle cx="21.3" cy="11.4" r="3.1"/></svg>',
+  car:'<svg class="ic" viewBox="0 0 32 16" aria-hidden="true"><path d="M1.6 11.4c0-2 1-3 3.4-3.4l5-.9 4-2.9c.8-.5 1.7-.7 2.7-.7h4.1c1.3 0 2.4.4 3.4 1.2l2.7 2.2 2.4.4c1.5.3 1.9 1.4 1.9 2.6v1.5h-2.8a3.4 3.4 0 0 0-6.6 0H11a3.4 3.4 0 0 0-6.6 0z"/><circle cx="7.7" cy="12.2" r="2.5"/><circle cx="23.5" cy="12.2" r="2.5"/></svg>',
+  rally:'<svg class="ic" viewBox="0 0 32 16" aria-hidden="true"><path d="M2 11.4V9.2c0-1 .6-1.6 1.6-1.8l4.6-.8 3.6-3.5c.6-.5 1.3-.8 2.1-.8h7.5c.9 0 1.6.4 2.1 1l2.7 3.3h2.1c1 0 1.6.7 1.6 1.6v3.2h-2.6a3.4 3.4 0 0 0-6.6 0H11.2a3.4 3.4 0 0 0-6.6 0z"/><path d="M19.6 1.4h6.2v1.4h-6.2z"/><circle cx="7.9" cy="12.2" r="2.5"/><circle cx="23.3" cy="12.2" r="2.5"/></svg>',
+  bike:'<svg class="ic" viewBox="0 0 32 16" aria-hidden="true"><path d="M10.4 9.6 13.6 5l4.2-.9 2.4-2.3h2.2l-1.4 2 3.2 3.9-3.1 1.3-3.4-.1-2.3 2.6z"/><path d="M6.6 8.1a4 4 0 1 0 .1 8 4 4 0 0 0-.1-8zm0 1.8a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4zM25.4 8.1a4 4 0 1 0 .1 8 4 4 0 0 0-.1-8zm0 1.8a2.2 2.2 0 1 1 0 4.4 2.2 2.2 0 0 1 0-4.4z"/><path d="m6.2 11.6 4.5-2.6 1 1.2-4.6 2.5zM22.6 6.8l3.4 5-1.2.8-3.5-5z"/></svg>',
+};
+const icon = s => ICONS[s.kind] || "";
 const SBY = Object.fromEntries(SERIES.map(s=>[s.id,s]));
 
 // Flatten sessions
@@ -209,7 +222,10 @@ function load(data){
     if(!SBY[sid]) continue;
     for(const ev of ser.events){
       for(const x of ev.sessions){
-        SESS.push({sid, d:new Date(x.start), label:x.label, key:!!x.race, ev:ev.name, place:ev.place||"", round:ev.round, evKey:sid+"|"+ev.season+"|"+ev.round});
+        // All-day entries (dates only) are pinned to local noon of their calendar date.
+        const t = new Date(x.start);
+        const d = x.allDay ? new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate(), 12) : t;
+        SESS.push({sid, d, allDay:!!x.allDay, label:x.label, key:!!x.race, ev:ev.name, place:ev.place||"", round:ev.round, evKey:sid+"|"+ev.season+"|"+ev.round});
       }
     }
   }
@@ -236,6 +252,7 @@ const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
 document.getElementById("tz").textContent = "Times in " + tzName.replace(/_/g," ");
 
 function status(s, now){
+  if(s.allDay){ const a=ymd(s.d), b=ymd(now); return a===b?"live":a<b?"done":"up"; }
   const len = s.key ? 2*3600e3 : 3600e3;
   if(now < s.d) return "up";
   if(now - s.d < len) return "live";
@@ -246,13 +263,19 @@ function rel(ms){
   const h=Math.floor(m/60); if(h<48) return h+"h "+String(m%60).padStart(2,"0")+"m";
   return Math.round(h/24)+" days";
 }
+function until(s, now){
+  if(!s.allDay) return "in "+rel(s.d-now);
+  const n = Math.round((new Date(s.d.getFullYear(),s.d.getMonth(),s.d.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+  return n===1 ? "tomorrow" : "in "+n+" days";
+}
+const tm = s => s.allDay ? "All day" : fmtTime.format(s.d);
 const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 function renderChips(){
   const el = document.getElementById("chips");
   const mains = SERIES.filter(s=>s.main).map(s=>{
     const on = fav.has(s.id);
-    return `<button type="button" class="chip${s.nodata?" off":""}" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${s.nodata?"false":on}" ${s.nodata?'title="No schedule source yet"':""}><i></i>${esc(s.name)}${s.nodata?' <span class="tag">soon</span>':""}</button>`;
+    return `<button type="button" class="chip${s.nodata?" off":""}" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${s.nodata?"false":on}" ${s.nodata?'title="No schedule source yet"':""}><i></i>${icon(s)}${esc(s.name)}${s.nodata?' <span class="tag">soon</span>':""}</button>`;
   }).join("");
   const otherOn = SERIES.filter(s=>!s.main && fav.has(s.id)).length;
   el.innerHTML = mains + `<button type="button" class="chip more" id="moreBtn" aria-haspopup="dialog">Others${otherOn?` <span class="tag">${otherOn} on</span>`:""} &#9662;</button>`;
@@ -260,18 +283,26 @@ function renderChips(){
 function renderOthers(){
   document.getElementById("others").innerHTML = SERIES.filter(s=>!s.main).map(s=>{
     const on = fav.has(s.id);
-    return `<button type="button" class="row" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${!s.nodata && on}" ${s.nodata?"disabled":""}><i></i><span><b>${esc(s.name)}</b><small>${esc(s.full)}${s.nodata?" · no schedule source yet":""}</small></span><em class="tg">${s.nodata?"Soon":on?"On":"Add"}</em></button>`;
+    return `<button type="button" class="row" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${!s.nodata && on}" ${s.nodata?"disabled":""}><i></i><span><b>${icon(s)} ${esc(s.name)}</b><small>${esc(s.full)}${s.nodata?" · no schedule source yet":""}</small></span><em class="tg">${s.nodata?"Soon":on?"On":"Add"}</em></button>`;
   }).join("");
 }
 function renderNext(){
   const now = new Date();
   const el = document.getElementById("next");
-  const live = visible().find(s=>status(s,now)==="live");
-  const nx = live || visible().find(s=>s.d>now);
-  if(!nx){el.hidden=true;return}
-  el.hidden=false; el.dataset.day = ymd(nx.d);
-  const sr = SBY[nx.sid];
-  el.innerHTML = `<span class="lbl">${live?"On now":"Next up"}</span><span class="pill" style="--c:${sr.c}">${esc(sr.name)}</span><span class="what"><b>${esc(nx.label)}</b><small>${esc(nx.ev)} · ${fmtShort.format(nx.d)}</small></span><span class="cd">${live?"LIVE":fmtTime.format(nx.d)}<small>${live?"started "+fmtTime.format(nx.d):"in "+rel(nx.d-now)}</small></span>`;
+  const vis = visible();
+  const live = vis.filter(s=>status(s,now)==="live");
+  let list = live;
+  if(!list.length){
+    const first = vis.find(s=>s.d>now);
+    list = first ? vis.filter(s=>+s.d===+first.d) : [];
+  }
+  if(!list.length){el.hidden=true;return}
+  el.hidden=false;
+  const isLive = live.length>0;
+  el.innerHTML = `<span class="lbl">${isLive?"On now":"Next up"}${list.length>1?" · "+list.length:""}</span>` + list.map(s=>{
+    const sr = SBY[s.sid];
+    return `<button type="button" class="nrow" data-day="${ymd(s.d)}"><span class="pill" style="--c:${sr.c}">${icon(sr)}${esc(sr.name)}</span><span class="what"><b>${esc(s.label)}</b><small>${esc(s.ev)} · ${fmtShort.format(s.d)}</small></span><span class="cd">${isLive?"LIVE":tm(s)}<small>${isLive?(s.allDay?"today":"started "+fmtTime.format(s.d)):until(s,now)}</small></span></button>`;
+  }).join("");
 }
 function renderCal(){
   const map = byDay(visible());
@@ -316,11 +347,11 @@ function renderAgenda(){
   h += `<div class="sub">${list.length} session${list.length>1?"s":""} · ${esc(tzName.replace(/_/g," "))}</div>`;
   for(const ss of groups.values()){
     const s0=ss[0], sr=SBY[s0.sid];
-    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small>${sr.stale?`<em class="stale">May be outdated: couldn't refresh since ${sr.updated?fmtShort.format(sr.updated):"recently"}</em>`:""}</div><ul class="ss">`;
+    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${icon(sr)}${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small>${sr.r&&ss.some(x=>status(x,now)==="done")?`<a class="res" href="${sr.r.replace("{Y}",s0.d.getFullYear())}" target="_blank" rel="noopener">Results &#8599;</a>`:""}${sr.stale?`<em class="stale">May be outdated: couldn't refresh since ${sr.updated?fmtShort.format(sr.updated):"recently"}</em>`:""}</div><ul class="ss">`;
     for(const s of ss){
       const st = status(s,now);
-      const stTxt = st==="live"?"Live":st==="done"?"Done":"in "+rel(s.d-now);
-      h += `<li class="${s.key?"key":""} ${st==="done"?"done":""}"><time datetime="${s.d.toISOString()}">${fmtTime.format(s.d)}</time><span class="nm">${esc(s.label)}</span><span class="st ${st==="live"?"live":""}">${stTxt}</span></li>`;
+      const stTxt = st==="live"?(s.allDay?"Today":"Live"):st==="done"?"Done":until(s,now);
+      h += `<li class="${s.key?"key":""} ${st==="done"?"done":""}"><time datetime="${s.allDay?ymd(s.d):s.d.toISOString()}">${tm(s)}</time><span class="nm">${esc(s.label)}</span><span class="st ${st==="live"?"live":""}">${stTxt}</span></li>`;
     }
     h += `</ul></div>`;
   }
@@ -351,7 +382,7 @@ document.addEventListener("keydown",e=>{
 });
 document.getElementById("grid").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(b) goto(b.dataset.day); });
 document.getElementById("agenda").addEventListener("click",e=>{ const b=e.target.closest("[data-jump]"); if(b) goto(b.dataset.jump); });
-document.getElementById("next").onclick=e=>goto(e.currentTarget.dataset.day);
+document.getElementById("next").addEventListener("click",e=>{ const b=e.target.closest(".nrow"); if(b) goto(b.dataset.day); });
 document.getElementById("prev").onclick=()=>shift(-1);
 document.getElementById("nextm").onclick=()=>shift(1);
 document.getElementById("today").onclick=()=>{ const t=new Date(); view=new Date(t.getFullYear(),t.getMonth(),1); sel=ymd(t); renderCal(); renderAgenda(); };
@@ -362,7 +393,7 @@ g.addEventListener("touchstart",e=>{sx=e.touches[0].clientX; sy=e.touches[0].cli
 g.addEventListener("touchend",e=>{ if(sx==null) return; const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy; if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5) shift(dx<0?1:-1); sx=null; },{passive:true});
 const fmtUpd = new Intl.DateTimeFormat(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
 function renderFoot(){
-  document.getElementById("foot").textContent = (GENERATED?"Schedules updated "+fmtUpd.format(GENERATED)+". ":"")+"Refreshed daily from the official MotoGP, FIA WEC and NASCAR feeds and the community sportstimes data. Times shown in your device's timezone.";
+  document.getElementById("foot").textContent = (GENERATED?"Schedules updated "+fmtUpd.format(GENERATED)+". ":"")+"Refreshed daily. Times shown in your device's timezone.";
 }
 async function boot(){
   try{
