@@ -102,7 +102,7 @@ async function dorna(acronym) {
   return events;
 }
 function titleCase(s) {
-  return s === s.toUpperCase() ? s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase()).replace(/\bGp\b/g, "GP") : s;
+  return s === s.toUpperCase() ? s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase()).replace(/\bGp\b/g, "GP").replace(/\b(Of|De|Del|Di)\b/g, (w) => w.toLowerCase()) : s;
 }
 
 // ---- FIA WEC official site (schema.org JSON-LD on each race page)
@@ -128,10 +128,14 @@ async function wec() {
         } catch {}
       }
       if (!ev) continue;
-      const name = String(ev.name || slug).replace(/^(FIA\s+)?WEC\s*[-–]?\s*/i, "").trim();
+      const fullName = String(ev.name || slug).trim();
+      const name = fullName.replace(/^(FIA\s+)?WEC\s*[-–]?\s*/i, "").replace(/\s+\d{4}$/, "").trim();
       const sessions = [].concat(ev.subEvent || [])
         .map((s) => {
-          const label = String(s.name || "").split(" - ")[0].trim();
+          // "Qualifying - LMGT3 - 6 Hours of Monza 2026" -> "Qualifying - LMGT3"
+          const parts = String(s.name || "").split(" - ").map((x) => x.trim());
+          if (parts.length > 1 && (parts.at(-1) === fullName || parts.at(-1).replace(/\s+\d{4}$/, "") === name)) parts.pop();
+          const label = parts.join(" · ").replace(/HYPERCAR/g, "Hypercar");
           return { label: label.replace(/^Qualifying session/i, "Qualifying"), start: iso(s.startDate), race: /^race/i.test(label) };
         })
         .filter((s) => s.start && s.label)
