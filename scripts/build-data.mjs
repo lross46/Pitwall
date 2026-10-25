@@ -194,6 +194,8 @@ for (const [id, fn] of Object.entries(SOURCES)) {
     const events = await fn();
     series[id] = { updated: now.toISOString(), events };
     console.log(`ok   ${id}: ${events.length} events, ${events.reduce((n, e) => n + e.sessions.length, 0)} sessions`);
+    const next = events.find((e) => e.sessions.some((s) => s.start > now.toISOString()));
+    if (next) console.log(`       next: ${next.name} (${next.place}) · ${next.sessions.map((s) => `${s.label}${s.race ? "*" : ""} ${s.start.slice(5, 16)}`).join(" | ")}`);
   } catch (e) {
     failures++;
     if (previous[id]) {
