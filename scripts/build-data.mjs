@@ -91,14 +91,14 @@ async function dorna(acronym) {
           else if (sn === "Q2") label = "Qualifying 2";
           else if (sn === "SPR") label = "Sprint";
           else if (sn === "RAC") label = "Race";
-          const url = code && sn ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/${sn}/Classification` : undefined;
+          const url = code && sn ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/${sn}/classification`.toLowerCase() : undefined;
           return { label, start: iso(b.date_start), race: b.kind === "RACE", url };
         })
         .filter((s) => s.start)
         .sort((a, b) => a.start.localeCompare(b.start));
       if (!sessions.length) return;
       const nm = (e.name || e.shortname || "").replace(/\s+/g, " ").trim();
-      const url = code ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/RAC/Classification` : undefined;
+      const url = code ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/rac/classification`.toLowerCase() : undefined;
       events.push({ name: titleCase(nm), place: e.circuit?.name || "", round: i + 1, season: y, url, sessions });
     });
   }
@@ -574,6 +574,14 @@ async function withResults(id, events) {
         ev.url = `https://www.fiaformulae.com/en/${l.replace("&amp;", "&")}`;
         for (const s of ev.sessions) if (FE_SESSION[s.key]) s.url = `${ev.url}&session=${FE_SESSION[s.key]}`;
       }
+    } else if (id === "f1-academy" && y === new Date().getUTCFullYear()) {
+      // The calendar only lists the current season; race ids rise with the round (a countdown banner repeats one, so sort).
+      const ids = (await roundLinks("https://www.f1academy.com/Racing-Series/Calendar", /Results\?raceid=(\d+)/g)).map((l) => +l.split("=")[1]).sort((a, b) => a - b);
+      if (ids.length === evs.length) ids.forEach((n, i) => {
+        const ev = evs.find((e) => e.round === i + 1);
+        if (ev) ev.url = `https://www.f1academy.com/Racing-Series/Results?raceid=${n}`;
+      });
+      else console.log(`     f1-academy: ${ids.length} result ids for ${evs.length} events, skipped`);
     }
   }
   for (const e of events) for (const s of e.sessions) delete s.key;
