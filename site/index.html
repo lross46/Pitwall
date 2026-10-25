@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14171C">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pit Wall">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Pit Wall Calendar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: phone-first single column (next-up strip, series chips, month grid, day agenda); two columns from 860px */
+:root{
+  --bg:#ECEEF1; --surface:#FFFFFF; --ink:#14171C; --muted:#5A6370; --line:#D3D8DF; --accent:#C8341F; --soft:#F5F6F8;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#101317;--surface:#191E24;--ink:#E7EAEE;--muted:#97A1AD;--line:#2B323B;--accent:#FF6247;--soft:#141920;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101317;--surface:#191E24;--ink:#E7EAEE;--muted:#97A1AD;--line:#2B323B;--accent:#FF6247;--soft:#141920;color-scheme:dark}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);background:var(--bg);-webkit-text-size-adjust:100%}
+body{margin:0}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 40px;display:grid;gap:14px}
+header{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--f-display);font-weight:700;font-size:30px;letter-spacing:.02em;text-transform:uppercase;margin:0;line-height:1}
+h1 span{color:var(--accent)}
+.tz{font-family:var(--f-mono);font-size:11.5px;color:var(--muted)}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* next up */
+.next{background:var(--ink);color:var(--bg);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border:0;text-align:left;width:100%}
+.next .lbl{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.12em;font-size:12px;opacity:.7;grid-column:1/-1}
+.next .what{min-width:0}
+.next .what b{font-family:var(--f-display);font-size:20px;font-weight:600;display:block;line-height:1.1;overflow-wrap:anywhere}
+.next .what small{opacity:.75;font-size:13px}
+.next .cd{font-family:var(--f-mono);font-weight:700;font-size:18px;text-align:right;white-space:nowrap}
+.next .cd small{display:block;font-weight:500;font-size:11px;opacity:.7}
+
+/* chips */
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;margin-inline:-4px;padding-inline:4px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;display:inline-flex;align-items:center;gap:7px;border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px 6px 9px;font-family:var(--f-display);font-weight:600;font-size:15px;letter-spacing:.03em;text-transform:uppercase}
+.chip i{width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.chip[aria-pressed="true"]{border-color:var(--c);background:color-mix(in srgb,var(--c) 14%,var(--surface))}
+.chip[aria-pressed="false"] i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--muted)}
+.chip[aria-pressed="false"]{color:var(--muted)}
+.chip.off{opacity:.55}
+.chip .tag{font-family:var(--f-body);font-size:10.5px;text-transform:none;letter-spacing:0;color:var(--muted);font-weight:600}
+.chip.more{--c:var(--muted)}
+
+/* layout */
+.main{display:grid;gap:14px;grid-template-columns:1fr}
+@media (min-width:860px){.main{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start}.agenda{position:sticky;top:14px}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;min-width:0}
+
+/* calendar */
+.cal{padding:12px 10px 10px}
+.calhead{display:flex;align-items:center;gap:6px;padding:0 4px 10px}
+.calhead h2{font-family:var(--f-display);font-weight:700;font-size:24px;text-transform:uppercase;letter-spacing:.03em;margin:0;flex:1}
+.calhead h2 small{color:var(--muted);font-weight:500}
+.nav{border:1px solid var(--line);background:var(--soft);border-radius:8px;height:36px;min-width:36px;padding:0 10px;font-family:var(--f-display);font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;touch-action:pan-y}
+.dow{font-family:var(--f-display);font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);text-align:center;padding-bottom:4px}
+.day{position:relative;aspect-ratio:1/1.05;border:0;border-radius:8px;background:var(--soft);padding:5px 4px 4px;display:flex;flex-direction:column;align-items:stretch;gap:3px;text-align:left;min-width:0}
+.day .num{font-family:var(--f-display);font-weight:600;font-size:17px;line-height:1;padding-left:2px}
+.day.out{background:transparent;color:var(--muted);opacity:.45}
+.day.has{background:color-mix(in srgb,var(--ink) 6%,var(--soft))}
+.day.today .num{color:var(--accent)}
+.day.today{box-shadow:inset 0 0 0 2px var(--accent)}
+.day[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+.day[aria-selected="true"].today .num{color:var(--bg)}
+.bars{display:flex;flex-direction:column;gap:2px;margin-top:auto}
+.bar{height:5px;border-radius:3px;background:var(--c);font-size:0;color:transparent;overflow:hidden}
+.bar.race{height:8px}
+.day .more{font-size:10px;font-family:var(--f-mono);color:inherit;opacity:.7;line-height:1}
+@media (min-width:520px){.day{aspect-ratio:auto;min-height:72px}.bar{height:auto;padding:1px 4px;font-family:var(--f-display);font-weight:600;font-size:11px;color:#fff;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}.bar.race{height:auto}}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);padding:10px 4px 0;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend b{display:inline-block;width:16px;border-radius:3px;background:var(--muted)}
+
+/* agenda */
+.agenda{padding:14px}
+.agenda h3{font-family:var(--f-display);font-size:22px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;margin:0 0 2px}
+.agenda .sub{color:var(--muted);font-size:13px;margin-bottom:12px}
+.ev{border-top:1px solid var(--line);padding:12px 0 6px}
+.ev:first-of-type{border-top:0;padding-top:4px}
+.evh{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
+.pill{font-family:var(--f-display);font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--c);border-radius:4px;padding:1px 6px}
+.evh b{font-weight:700;font-size:16px}
+.evh small{color:var(--muted);font-size:13px;width:100%}
+.ss{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.ss li{display:grid;grid-template-columns:5.6em 1fr auto;gap:10px;align-items:center;padding:6px 8px;border-radius:7px}
+.ss li.key{background:color-mix(in srgb,var(--c) 12%,transparent)}
+.ss time{white-space:nowrap;font-family:var(--f-mono);font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+.ss .nm{min-width:0}
+.ss li.key .nm{font-weight:700}
+.st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;font-family:var(--f-display);color:var(--muted);white-space:nowrap}
+.st.live{color:#fff;background:var(--accent);border-radius:4px;padding:1px 6px}
+.ss li.done{opacity:.55}
+.empty{color:var(--muted);padding:18px 0 8px}
+.empty b{display:block;color:var(--ink);font-family:var(--f-display);font-size:18px;text-transform:uppercase;letter-spacing:.03em;margin-bottom:4px}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:700;padding:0;text-decoration:underline;text-underline-offset:3px}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:color-mix(in srgb,#000 45%,transparent);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px max(16px,env(safe-area-inset-right,0px)) calc(20px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:grid;gap:10px;max-height:85vh;overflow:auto}
+@media (min-width:600px){.scrim{align-items:center}.sheet{border-radius:16px}}
+.sheet h3{font-family:var(--f-display);font-size:22px;text-transform:uppercase;margin:0;letter-spacing:.03em}
+.sheet p{margin:0;color:var(--muted);font-size:13px}
+.row{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--soft);text-align:left;width:100%}
+.row i{width:12px;height:12px;border-radius:50%;background:var(--c);flex:none}
+.row span{flex:1;min-width:0}
+.row span b{display:block;font-family:var(--f-display);font-size:17px;text-transform:uppercase;letter-spacing:.03em;font-weight:600}
+.row span small{color:var(--muted);font-size:12px}
+.row .tg{font-family:var(--f-display);font-weight:700;text-transform:uppercase;font-size:12px;letter-spacing:.06em;color:var(--muted)}
+.row[aria-pressed="true"] .tg{color:var(--c)}
+.row[disabled]{opacity:.55;cursor:not-allowed}
+.done-btn{justify-self:end;border:0;background:var(--ink);color:var(--bg);border-radius:8px;padding:8px 16px;font-family:var(--f-display);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.foot{color:var(--muted);font-size:12px}
+@media (prefers-reduced-motion:no-preference){.day,.chip,.row{transition:background .15s,border-color .15s}}
+.loading{color:var(--muted);padding:18px 0}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Pit Wall<span>.</span></h1>
+    <div class="tz" id="tz"></div>
+  </header>
+  <button class="next" id="next" type="button" hidden></button>
+  <div class="chips" id="chips" role="toolbar" aria-label="Series"></div>
+  <div class="main">
+    <section class="panel cal" aria-label="Month calendar">
+      <div class="calhead">
+        <h2 id="mtitle"></h2>
+        <button class="nav" id="prev" type="button" aria-label="Previous month">&#8249;</button>
+        <button class="nav" id="today" type="button">Today</button>
+        <button class="nav" id="nextm" type="button" aria-label="Next month">&#8250;</button>
+      </div>
+      <div class="grid" id="grid" role="grid"></div>
+      <div class="legend"><span><b style="height:8px"></b>Race day</span><span><b style="height:5px"></b>Practice / qualifying</span></div>
+    </section>
+    <section class="panel agenda" id="agenda" aria-live="polite"></section>
+  </div>
+  <p class="foot" id="foot">Loading schedules…</p>
+</div>
+<div class="scrim" id="scrim" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-h">
+    <h3 id="sheet-h">Other series</h3>
+    <p>Tap to add or remove from your calendar.</p>
+    <div id="others" style="display:grid;gap:8px"></div>
+    <button class="done-btn" id="close" type="button">Done</button>
+  </div>
+</div>
+
+<script>
+const SERIES = [
+  {id:"f1", name:"F1", full:"Formula 1", c:"#E10600", main:true},
+  {id:"f2", name:"F2", full:"Formula 2", c:"#1D78D6", main:true},
+  {id:"f3", name:"F3", full:"Formula 3", c:"#D11F7A", main:true},
+  {id:"motogp", name:"MotoGP", full:"MotoGP", c:"#E08C00", main:true},
+  {id:"moto2", name:"Moto2", full:"Moto2", c:"#B5651D", main:true},
+  {id:"moto3", name:"Moto3", full:"Moto3", c:"#8F5A2A", main:true},
+  {id:"wec", name:"WEC", full:"FIA World Endurance", c:"#0E8F7E", main:true},
+  {id:"indycar", name:"IndyCar", full:"NTT IndyCar Series", c:"#5B45C9", main:true},
+  {id:"fe", name:"Formula E", full:"ABB FIA Formula E", c:"#0093A8"},
+  {id:"f1-academy", name:"F1 Academy", full:"F1 Academy", c:"#C2508C"},
+  {id:"nascar", name:"NASCAR", full:"NASCAR Cup Series", c:"#C9A100"},
+  {id:"indynxt", name:"Indy NXT", full:"Indy NXT", c:"#6F7FA0"},
+];
+const SBY = Object.fromEntries(SERIES.map(s=>[s.id,s]));
+
+// Flatten sessions
+let SESS = [];
+let GENERATED = null;
+function load(data){
+  GENERATED = data.generated ? new Date(data.generated) : null;
+  SESS = [];
+  for(const s of SERIES) s.nodata = !(data.series && data.series[s.id] && data.series[s.id].events.length);
+  for(const [sid, ser] of Object.entries(data.series||{})){
+    if(!SBY[sid]) continue;
+    for(const ev of ser.events){
+      for(const x of ev.sessions){
+        SESS.push({sid, d:new Date(x.start), label:x.label, key:!!x.race, ev:ev.name, place:ev.place||"", round:ev.round, evKey:sid+"|"+ev.season+"|"+ev.round});
+      }
+    }
+  }
+  SESS.sort((a,b)=>a.d-b.d);
+}
+// State
+const store = {
+  get(k,f){try{const v=localStorage.getItem(k);return v==null?f:JSON.parse(v)}catch(e){return f}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+let fav = new Set(store.get("pw.fav", ["f1","f2","f3","motogp","indycar"]).filter(id=>SBY[id]));
+const now0 = new Date();
+let view = new Date(now0.getFullYear(), now0.getMonth(), 1);
+let sel = ymd(now0);
+
+function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function visible(){ return SESS.filter(s=>fav.has(s.sid)); }
+function byDay(list){ const m=new Map(); for(const s of list){const k=ymd(s.d); if(!m.has(k)) m.set(k,[]); m.get(k).push(s);} return m; }
+const fmtTime = new Intl.DateTimeFormat(undefined,{hour:"2-digit",minute:"2-digit"});
+const fmtDay = new Intl.DateTimeFormat(undefined,{weekday:"long",day:"numeric",month:"long"});
+const fmtShort = new Intl.DateTimeFormat(undefined,{weekday:"short",day:"numeric",month:"short"});
+const fmtMonth = new Intl.DateTimeFormat(undefined,{month:"long"});
+const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+document.getElementById("tz").textContent = "Times in " + tzName.replace(/_/g," ");
+
+function status(s, now){
+  const len = s.key ? 2*3600e3 : 3600e3;
+  if(now < s.d) return "up";
+  if(now - s.d < len) return "live";
+  return "done";
+}
+function rel(ms){
+  const m=Math.round(ms/60000); if(m<60) return m+" min";
+  const h=Math.floor(m/60); if(h<48) return h+"h "+String(m%60).padStart(2,"0")+"m";
+  return Math.round(h/24)+" days";
+}
+const esc = s => String(s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function renderChips(){
+  const el = document.getElementById("chips");
+  const mains = SERIES.filter(s=>s.main).map(s=>{
+    const on = fav.has(s.id);
+    return `<button type="button" class="chip${s.nodata?" off":""}" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${s.nodata?"false":on}" ${s.nodata?'title="No schedule source yet"':""}><i></i>${esc(s.name)}${s.nodata?' <span class="tag">soon</span>':""}</button>`;
+  }).join("");
+  const otherOn = SERIES.filter(s=>!s.main && fav.has(s.id)).length;
+  el.innerHTML = mains + `<button type="button" class="chip more" id="moreBtn" aria-haspopup="dialog">Others${otherOn?` <span class="tag">${otherOn} on</span>`:""} &#9662;</button>`;
+}
+function renderOthers(){
+  document.getElementById("others").innerHTML = SERIES.filter(s=>!s.main).map(s=>{
+    const on = fav.has(s.id);
+    return `<button type="button" class="row" style="--c:${s.c}" data-id="${s.id}" aria-pressed="${!s.nodata && on}" ${s.nodata?"disabled":""}><i></i><span><b>${esc(s.name)}</b><small>${esc(s.full)}${s.nodata?" · no schedule source yet":""}</small></span><em class="tg">${s.nodata?"Soon":on?"On":"Add"}</em></button>`;
+  }).join("");
+}
+function renderNext(){
+  const now = new Date();
+  const el = document.getElementById("next");
+  const live = visible().find(s=>status(s,now)==="live");
+  const nx = live || visible().find(s=>s.d>now);
+  if(!nx){el.hidden=true;return}
+  el.hidden=false; el.dataset.day = ymd(nx.d);
+  const sr = SBY[nx.sid];
+  el.innerHTML = `<span class="lbl">${live?"On now":"Next up"}</span><span class="pill" style="--c:${sr.c}">${esc(sr.name)}</span><span class="what"><b>${esc(nx.label)}</b><small>${esc(nx.ev)} · ${fmtShort.format(nx.d)}</small></span><span class="cd">${live?"LIVE":fmtTime.format(nx.d)}<small>${live?"started "+fmtTime.format(nx.d):"in "+rel(nx.d-now)}</small></span>`;
+}
+function renderCal(){
+  const map = byDay(visible());
+  const y=view.getFullYear(), m=view.getMonth();
+  document.getElementById("mtitle").innerHTML = `${esc(fmtMonth.format(view))} <small>${y}</small>`;
+  const first = new Date(y,m,1);
+  const lead = (first.getDay()+6)%7; // Monday first
+  const start = new Date(y,m,1-lead);
+  const todayK = ymd(new Date());
+  const dows = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d=>`<div class="dow" role="columnheader">${d}</div>`).join("");
+  let cells="";
+  const weeks = Math.ceil((lead + new Date(y,m+1,0).getDate())/7);
+  for(let i=0;i<weeks*7;i++){
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate()+i);
+    const k = ymd(d); const list = map.get(k)||[];
+    // one bar per series per day, thicker if it includes a race
+    const per = new Map();
+    for(const s of list){ const p=per.get(s.sid)||{race:false,n:0}; p.race = p.race||s.key; p.n++; per.set(s.sid,p); }
+    const bars=[...per.entries()].sort((a,b)=>SERIES.findIndex(s=>s.id===a[0])-SERIES.findIndex(s=>s.id===b[0]));
+    const shown = bars.slice(0,3);
+    const bh = shown.map(([sid,p])=>`<span class="bar${p.race?" race":""}" style="--c:${SBY[sid].c}">${esc(SBY[sid].name)}</span>`).join("") + (bars.length>3?`<span class="more">+${bars.length-3}</span>`:"");
+    const cls = ["day", d.getMonth()!==m?"out":"", list.length?"has":"", k===todayK?"today":""].filter(Boolean).join(" ");
+    const aria = fmtDay.format(d) + (list.length? `, ${list.length} sessions`:"" );
+    cells += `<button type="button" role="gridcell" class="${cls}" data-day="${k}" aria-selected="${k===sel}" aria-label="${esc(aria)}"><span class="num">${d.getDate()}</span><span class="bars">${bh}</span></button>`;
+  }
+  document.getElementById("grid").innerHTML = dows + cells;
+}
+function renderAgenda(){
+  const now = new Date();
+  const [Y,M,D] = sel.split("-").map(Number);
+  const day = new Date(Y,M-1,D);
+  const list = visible().filter(s=>ymd(s.d)===sel);
+  const el = document.getElementById("agenda");
+  let h = `<h3>${esc(fmtDay.format(day))}</h3>`;
+  if(!list.length){
+    const nx = visible().find(s=>s.d>=new Date(Y,M-1,D+1));
+    h += `<div class="sub">${tzName.replace(/_/g," ")}</div><div class="empty"><b>No sessions</b>Nothing from your series on this day.${nx?` Next: <button type="button" class="linkbtn" data-jump="${ymd(nx.d)}">${esc(SBY[nx.sid].name)} ${esc(nx.label)}, ${fmtShort.format(nx.d)}</button>`:""}</div>`;
+    el.innerHTML = h; return;
+  }
+  const groups = new Map();
+  for(const s of list){ if(!groups.has(s.evKey)) groups.set(s.evKey,[]); groups.get(s.evKey).push(s); }
+  h += `<div class="sub">${list.length} session${list.length>1?"s":""} · ${esc(tzName.replace(/_/g," "))}</div>`;
+  for(const ss of groups.values()){
+    const s0=ss[0], sr=SBY[s0.sid];
+    h += `<div class="ev" style="--c:${sr.c}"><div class="evh"><span class="pill">${esc(sr.name)}</span><b>${esc(s0.ev)}</b><small>Round ${s0.round}${s0.place?" · "+esc(s0.place):""}</small></div><ul class="ss">`;
+    for(const s of ss){
+      const st = status(s,now);
+      const stTxt = st==="live"?"Live":st==="done"?"Done":"in "+rel(s.d-now);
+      h += `<li class="${s.key?"key":""} ${st==="done"?"done":""}"><time datetime="${s.d.toISOString()}">${fmtTime.format(s.d)}</time><span class="nm">${esc(s.label)}</span><span class="st ${st==="live"?"live":""}">${stTxt}</span></li>`;
+    }
+    h += `</ul></div>`;
+  }
+  el.innerHTML = h;
+}
+function renderAll(){ renderChips(); renderNext(); renderCal(); renderAgenda(); }
+function save(){ store.set("pw.fav",[...fav]); }
+function goto(k){ sel=k; const [Y,M]=k.split("-").map(Number); view=new Date(Y,M-1,1); renderCal(); renderAgenda(); if(innerWidth<860) document.getElementById("agenda").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth",block:"start"}); }
+function shift(n){ view=new Date(view.getFullYear(), view.getMonth()+n, 1); renderCal(); }
+
+document.getElementById("chips").addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  if(b.id==="moreBtn"){ renderOthers(); document.getElementById("scrim").hidden=false; document.getElementById("close").focus(); return; }
+  const s=SBY[b.dataset.id]; if(!s||s.nodata) return;
+  fav.has(s.id)?fav.delete(s.id):fav.add(s.id); save(); renderAll();
+});
+document.getElementById("others").addEventListener("click",e=>{
+  const b=e.target.closest("button[data-id]"); if(!b||b.disabled) return;
+  const id=b.dataset.id; fav.has(id)?fav.delete(id):fav.add(id); save(); renderOthers(); renderAll();
+});
+const closeSheet=()=>{document.getElementById("scrim").hidden=true; document.getElementById("moreBtn")?.focus();};
+document.getElementById("close").onclick=closeSheet;
+document.getElementById("scrim").addEventListener("click",e=>{ if(e.target.id==="scrim") closeSheet(); });
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape" && !document.getElementById("scrim").hidden) return closeSheet();
+  if(e.target.closest("input,textarea")) return;
+  if(e.key==="ArrowLeft"&&e.altKey) shift(-1); if(e.key==="ArrowRight"&&e.altKey) shift(1);
+});
+document.getElementById("grid").addEventListener("click",e=>{ const b=e.target.closest(".day"); if(b) goto(b.dataset.day); });
+document.getElementById("agenda").addEventListener("click",e=>{ const b=e.target.closest("[data-jump]"); if(b) goto(b.dataset.jump); });
+document.getElementById("next").onclick=e=>goto(e.currentTarget.dataset.day);
+document.getElementById("prev").onclick=()=>shift(-1);
+document.getElementById("nextm").onclick=()=>shift(1);
+document.getElementById("today").onclick=()=>{ const t=new Date(); view=new Date(t.getFullYear(),t.getMonth(),1); sel=ymd(t); renderCal(); renderAgenda(); };
+// swipe months
+let sx=null, sy=null;
+const g=document.getElementById("grid");
+g.addEventListener("touchstart",e=>{sx=e.touches[0].clientX; sy=e.touches[0].clientY},{passive:true});
+g.addEventListener("touchend",e=>{ if(sx==null) return; const dx=e.changedTouches[0].clientX-sx, dy=e.changedTouches[0].clientY-sy; if(Math.abs(dx)>50&&Math.abs(dx)>Math.abs(dy)*1.5) shift(dx<0?1:-1); sx=null; },{passive:true});
+const fmtUpd = new Intl.DateTimeFormat(undefined,{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"});
+function renderFoot(){
+  document.getElementById("foot").textContent = (GENERATED?"Schedules updated "+fmtUpd.format(GENERATED)+". ":"")+"Refreshed daily from the official MotoGP, FIA WEC and NASCAR feeds and the community sportstimes data. Times shown in your device's timezone.";
+}
+async function boot(){
+  try{
+    const r = await fetch("data/schedule.json",{cache:"no-cache"});
+    if(!r.ok) throw new Error(r.status);
+    load(await r.json());
+  }catch(e){
+    document.getElementById("foot").textContent = "Couldn't load schedules. Check your connection and reopen the app.";
+    return;
+  }
+  renderAll(); renderFoot();
+}
+document.getElementById("agenda").innerHTML='<div class="loading">Loading schedules…</div>';
+boot();
+if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+setInterval(()=>{renderNext(); renderAgenda();}, 60000);
+</script>
+</body>
+</html>

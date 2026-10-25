@@ -1,0 +1,15 @@
+{
+  "name": "Pit Wall",
+  "short_name": "Pit Wall",
+  "description": "Motorsport calendar for your favourite series, in your local time.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101317",
+  "theme_color": "#14171C",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
