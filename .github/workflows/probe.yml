@@ -1,0 +1,15 @@
+name: Probe sources (temporary)
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Space-separated URLs (blank = defaults)"
+        required: false
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node scripts/probe.mjs ${{ inputs.urls }}
