@@ -20,7 +20,13 @@ A phone-first motorsport calendar. Pick your series, see the month at a glance, 
 | Indy NXT | indynxt.com event schedules |
 | Supercars | supercars.com event schedules |
 | WRC | wrc.com calendar (start time, then rally days) |
-| WorldSBK, IMSA, BTCC, DTM, Super Formula | Wikipedia season articles (dates only, no session times) |
+| WorldSBK | WorldSBK public events API (`api.wsbk.pulselive.com`) |
+| DTM | DTM website API (`api.dtm.com`) |
+| Super Formula | superformula.net race pages (timetable in JST) |
+| IMSA, BTCC | Wikipedia season articles (dates only: the official sites block automated access) |
+
+WorldSBK, DTM and Super Formula fall back to Wikipedia dates for rounds whose timetable isn't published yet.
+Results links go to the official results page for each session (F1, MotoGP classes, Formula E) or each event (most other series).
 
 If any source fails, the series keeps its last schedule, the app marks it "may be outdated", and the daily run fails so GitHub emails the repo owner.
 
