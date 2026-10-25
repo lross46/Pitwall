@@ -1,5 +1,5 @@
 // Network first, falling back to the last cached copy so the app opens offline.
-const CACHE = "pitwall-v1";
+const CACHE = "pitwall-v2";
 const SHELL = ["./", "index.html", "manifest.webmanifest", "data/schedule.json", "icons/icon-192.png"];
 
 self.addEventListener("install", (e) => {
@@ -16,7 +16,8 @@ self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
   e.respondWith(
-    fetch(req)
+    // no-cache: always check with the server, so new versions show up straight away.
+    fetch(req.url, { cache: "no-cache", credentials: "same-origin" })
       .then((res) => {
         if (res.ok) {
           const copy = res.clone();

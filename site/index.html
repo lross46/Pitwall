@@ -407,7 +407,13 @@ async function boot(){
 }
 document.getElementById("agenda").innerHTML='<div class="loading">Loading schedules…</div>';
 boot();
-if("serviceWorker" in navigator) addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+if("serviceWorker" in navigator){
+  // Reload once when an updated service worker takes over, so a new version shows without a second restart.
+  const hadSW = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(hadSW) location.reload(); });
+  addEventListener("load",()=>navigator.serviceWorker.register("sw.js").then(r=>r.update()).catch(()=>{}));
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{}); });
+}
 setInterval(()=>{renderNext(); renderAgenda();}, 60000);
 </script>
 </body>
