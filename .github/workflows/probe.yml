@@ -6,13 +6,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - run: |
-          curl -s "https://api.pulselive.motogp.com/motogp/v1/events?seasonYear=2026" | jq -r '.[] | select(.kind=="GP") | [.date_start, .short_name, .name] | @tsv'
+          curl -s "https://api.pulselive.motogp.com/motogp/v1/events?seasonYear=2026" | jq -c '[.[] | select(.kind=="GP")][16] | del(.broadcasts) | del(.circuit)' | head -c 1500; echo
       - run: |
-          for u in "https://www.motogp.com/en/gp-results/2026/INA/MotoGP/RAC/Classification" "https://www.motogp.com/en/gp-results/2026/AUS/MotoGP/RAC/Classification"; do
+          for u in "https://www.motogp.com/en/gp-results/2026/INA/MotoGP/RAC/Classification" "https://www.motogp.com/en/gp-results/2025/QAT/MotoGP/RAC/Classification"; do
             echo "== $u"
-            timeout 90 google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=20000 --dump-dom "$u" > page.html 2>/dev/null
-            grep -oiE '(indonesia|mandalika|australia|phillip island)[^<]{0,40}' page.html | sort | uniq -c | sort -rn | head -8
-            grep -oE '"rider[^"]*"[^<]{0,0}' page.html | head -2
-            grep -oE 'results-table[^<]{0,200}' page.html | head -2
-            grep -oE '<title>[^<]*' page.html
+            timeout 90 google-chrome --headless=new --no-sandbox --disable-gpu --virtual-time-budget=25000 --dump-dom "$u" > page.html 2>/dev/null
+            grep -oE '<option[^>]*selected[^>]*>[^<]*' page.html | head -10
+            grep -oiE '(qatar|lusail)[^<]{0,40}' page.html | head -3
+            grep -oE 'results-table__body-cell--rider[^>]*>[^<]{0,60}' page.html | head -3
+            grep -oE 'rider-name[^>]*>[^<]{0,60}' page.html | head -3
           done
