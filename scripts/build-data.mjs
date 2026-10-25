@@ -555,7 +555,13 @@ async function withResults(id, events) {
     } else if (id === "f2" || id === "f3") {
       const host = id === "f2" ? "https://www.fiaformula2.com" : "https://www.fiaformula3.com";
       const links = await roundLinks(`${host}/Calendar`, new RegExp(`/en/racing/${y}/[a-z0-9-]+`, "g"));
-      links.forEach((l, i) => { const ev = evs.find((e) => e.round === i + 1); if (ev) ev.url = host + l; });
+      // The calendar isn't in round order, so match each link's slug to the event's location or name.
+      const slug = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      for (const l of links) {
+        const sl = l.split("/").pop();
+        const ev = evs.find((e) => [e.place, e.name.replace(/\s+round$/i, "")].some((t) => slug(t) === sl));
+        if (ev) ev.url = host + l;
+      }
     } else if (id === "fe") {
       const links = await roundLinks("https://www.fiaformulae.com/en/results", /results-and-standings\?season=\d+&(?:amp;)?round=\d+-[a-z0-9-]+/g);
       const seasons = links.map((l) => +l.match(/season=(\d+)/)[1]);
