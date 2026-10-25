@@ -12,4 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: node scripts/probe.mjs ${{ inputs.urls }}
+      - run: node scripts/probe.mjs
+        env:
+          URLS: ${{ inputs.urls }}

@@ -1,9 +1,9 @@
 // Temporary: inspects candidate schedule pages from GitHub's servers.
-// Args: "url|regex" pairs; prints context around regex matches.
+// URLS env: entries separated by " ;; ", each "url|regex|count|width"; prints context around regex matches.
 const UA = { "User-Agent": "Mozilla/5.0 (compatible; PitWallCalendar/1.0; personal use)", "Accept": "text/html,application/json;q=0.9,*/*;q=0.8" };
 const one = (s) => s.replace(/\s+/g, " ");
-for (const arg of process.argv.slice(2)) {
-  const [u, re = "Practice", n = "4", w = "300"] = arg.split("|");
+for (const arg of (process.env.URLS || "").split(" ;; ").filter(Boolean)) {
+  const [u, re = "Practice", n = "4", w = "300"] = arg.split("||");
   try {
     const r = await fetch(u, { headers: UA, redirect: "follow" });
     const t = await r.text();
