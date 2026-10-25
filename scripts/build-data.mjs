@@ -50,7 +50,7 @@ async function sportstimes(id) {
     for (const r of d.races || []) {
       if (r.canceled || r.cancelled) continue;
       const sessions = Object.entries(r.sessions || {})
-        .map(([k, v]) => ({ label: ST_LABELS[k] || k, start: iso(v), race: RACE_KEYS.has(k) }))
+        .map(([k, v]) => ({ label: ST_LABELS[k] || k, start: iso(v), race: RACE_KEYS.has(k), key: k }))
         .filter((s) => s.start);
       if (!sessions.length) continue;
       events.push({
@@ -71,12 +71,14 @@ async function motogpEvents(year) {
   }
   return motogpSeason.get(year);
 }
+const CAT = { MGP: "MotoGP", MT2: "Moto2", MT3: "Moto3" };
 async function dorna(acronym) {
   const events = [];
   for (const y of YEARS) {
     const list = (await motogpEvents(y)) || [];
     const gps = list.filter((e) => e.kind === "GP").sort((a, b) => (a.date_start || "").localeCompare(b.date_start || ""));
     gps.forEach((e, i) => {
+      const code = String(e.short_name || e.shortname || "").toUpperCase();
       const bs = (e.broadcasts || []).filter((b) => b.category?.acronym === acronym && b.date_start && !["PRESS", "WARM_UP"].includes(b.kind));
       const sessions = bs
         .map((b) => {
@@ -89,7 +91,8 @@ async function dorna(acronym) {
           else if (sn === "Q2") label = "Qualifying 2";
           else if (sn === "SPR") label = "Sprint";
           else if (sn === "RAC") label = "Race";
-          return { label, start: iso(b.date_start), race: b.kind === "RACE" };
+          const url = code && sn ? `https://www.motogp.com/en/gp-results/${y}/${code}/${CAT[acronym]}/${sn}/Classification` : undefined;
+          return { label, start: iso(b.date_start), race: b.kind === "RACE", url };
         })
         .filter((s) => s.start)
         .sort((a, b) => a.start.localeCompare(b.start));
@@ -148,7 +151,7 @@ async function aco(base) {
         .filter((s) => s.start && s.label)
         .sort((a, b) => a.start.localeCompare(b.start));
       if (!sessions.length) continue;
-      events.push({ name, place: ev.location?.name || "", round, season: +(slug.match(/(20\d\d)$/) || [])[1] || y, sessions });
+      events.push({ name, place: ev.location?.name || "", round, season: +(slug.match(/(20\d\d)$/) || [])[1] || y, url: `${base}/en/race/${slug}`, sessions });
     }
   }
   if (!events.length) throw new Error(`no events parsed from ${base}`);
@@ -197,7 +200,7 @@ async function sro(base) {
     }
     if (!sessions.length) continue;
     sessions.sort((a, b) => a.start.localeCompare(b.start));
-    events.push({ name, place: "", round, season: year, sessions });
+    events.push({ name, place: "", round, season: year, url, sessions });
   }
   if (!events.length) throw new Error(`no events parsed from ${base}`);
   return events;
@@ -240,7 +243,7 @@ async function indynxt() {
         sessions.push({ label, start: zonedToUtc(y, day.mon, day.d, hh, +tm[2], "America/New_York").toISOString(), race: /^race/i.test(label) });
       }
       if (!sessions.length) continue;
-      events.push({ name: name.replace(/\s*-\s*INDY NXT.*$/i, "").trim(), place: "", round, season: y, sessions });
+      events.push({ name: name.replace(/\s*-\s*INDY NXT.*$/i, "").trim(), place: "", round, season: y, url, sessions });
     }
   }
   if (!events.length) throw new Error("no Indy NXT events parsed");
@@ -277,7 +280,7 @@ async function supercars() {
     }
     if (!sessions.length) continue;
     sessions.sort((a, b) => a.start.localeCompare(b.start));
-    events.push({ name, place: "", round: events.length + 1, season: +slug.slice(0, 4), sessions });
+    events.push({ name, place: "", round: events.length + 1, season: +slug.slice(0, 4), url: `https://www.supercars.com/events/${slug}`, sessions });
   }
   console.log(`     supercars series seen: ${[...seriesSeen].join(", ")}`);
   if (!events.length) throw new Error("no Supercars events parsed");
@@ -313,7 +316,7 @@ async function wrc() {
         sessions.push({ label: `Rally day ${i + 1}`, start: d.toISOString(), race: dLocal === endDay, allDay: true });
         if (dLocal === endDay || !endDay) break;
       }
-      events.push({ name, place: "", round, season: y, sessions });
+      events.push({ name, place: "", round, season: y, url: `https://www.wrc.com/en/events/${slug}`, sessions });
     }
   }
   if (!events.length) throw new Error("no WRC events parsed");
@@ -412,29 +415,181 @@ async function nascar(seriesKey) {
   return events;
 }
 
+// ---- Super Formula official race pages (Japanese timetable, times in JST)
+const SF_LABEL = (t) => t
+  .replace(/フリー走行\s*\(?FP(\d)\)?/, "Practice $1").replace(/フリー走行/, "Practice")
+  .replace(/予選\s*/, "Qualifying ").replace(/Gr\.\s*([AB])/, "Group $1")
+  .replace(/決勝レース|決勝/, "Race").replace(/\s+/g, " ").trim();
+async function superformula() {
+  const events = [];
+  for (const y of YEARS) {
+    let list;
+    try { list = await getText(`https://superformula.net/sf3/race_taxonomy/${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    const ids = [...new Set([...list.matchAll(/<li>\s*<a href="https:\/\/superformula\.net\/sf3\/race\/(\d+)\/"/g)].map((m) => m[1]))];
+    for (const id of ids) {
+      const url = `https://superformula.net/sf3/race/${id}/`;
+      let page;
+      try { page = await getText(url); } catch { continue; }
+      const title = strip((page.match(/<title>([^<｜|]*)/) || [])[1] || "");
+      if (!/Rd\./.test(title) || /test/i.test(title)) continue;
+      const block = (page.match(/table_time_schedule[\s\S]*?(?=<span class="ank"|race_detail01_block03)/) || [])[0] || "";
+      const sessions = [];
+      for (const t of block.matchAll(/<caption>\s*(\d{1,2})\.(\d{1,2})[\s\S]*?<\/caption>([\s\S]*?)<\/table>/g)) {
+        const [, mo, d, rows] = t;
+        for (const r of rows.matchAll(/<th>\s*(\d{1,2}):(\d\d)[^<]*<\/th>\s*<td>([^<]+)<\/td>/g)) {
+          if (!/フリー走行|予選|決勝/.test(r[3])) continue;
+          const start = new Date(Date.UTC(y, +mo - 1, +d, +r[1] - 9, +r[2])).toISOString();
+          sessions.push({ label: SF_LABEL(r[3]), start, race: /決勝/.test(r[3]) });
+        }
+      }
+      if (!sessions.length) continue;
+      sessions.sort((a, b) => a.start.localeCompare(b.start));
+      const m = title.match(/Rd\.([\d.&\s]+?)\s+(.+)$/) || [];
+      const round = +(String(m[1] || "").match(/\d+/) || [events.length + 1])[0];
+      const venue = titleCase((m[2] || title).trim());
+      events.push({ name: venue, place: venue, round, season: y, url, sessions });
+    }
+  }
+  if (!events.length) throw new Error("no Super Formula timetables parsed");
+  return events;
+}
+
+// ---- DTM official API (same data the dtm.com event pages use)
+async function dtm() {
+  const list = (await getJSON("https://api.dtm.com/data?query=events")).events || [];
+  const events = [];
+  for (const y of YEARS) {
+    const evs = list.filter((e) => String(e.startTime || "").startsWith(String(y))).sort((a, b) => a.startTime.localeCompare(b.startTime));
+    let round = 0;
+    for (const e of evs) {
+      round++;
+      let d;
+      try { d = await getJSON(`https://api.dtm.com/data?query=eventDetails&slug=${encodeURIComponent(e.slug)}`); } catch { d = null; }
+      const ev = d?.event || d?.eventDetails || d || {};
+      const tt = (ev.timetable || []).filter((t) => t.raceSeries === "DTM" && t.start);
+      const sessions = tt.map((t) => ({ label: String(t.label || "").trim(), start: iso(t.start), race: /^(race|rennen)/i.test(t.label || "") })).filter((s) => s.start && s.label);
+      const url = `https://www.dtm.com/en/events/${e.slug}`;
+      if (!sessions.length) {
+        // Timetable not published yet: show the weekend as dates only.
+        const a = new Date(e.startTime), b = new Date(e.endTime || e.startTime);
+        for (let t = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate(), 12); t <= b.getTime() + 12 * 36e5; t += 864e5)
+          sessions.push({ label: "Race weekend", start: new Date(t).toISOString(), race: false, allDay: true });
+        if (sessions.length) { sessions.at(-1).label = "Race day"; sessions.at(-1).race = true; }
+      }
+      if (!sessions.length) continue;
+      events.push({ name: String(e.name || e.slug).replace(/\s+powered by.*$|\s+by\s+[A-Z].*$/i, "").trim(), place: ev.city || "", round, season: y, url, sessions });
+    }
+  }
+  if (!events.length) throw new Error("no DTM events in api.dtm.com");
+  return events;
+}
+
+// ---- WorldSBK official API (public endpoint behind worldsbk.com's event pages)
+async function wsbk() {
+  const API = "https://api.wsbk.pulselive.com/wsbk-events/v1";
+  const events = [];
+  for (const y of YEARS) {
+    let rounds;
+    try { rounds = (await getJSON(`${API}/seasons/${y}/rounds`)).data || []; } catch (e) { if (y === YEARS[0]) throw e; continue; }
+    rounds = rounds.filter((r) => !/test/i.test(`${r.attributes?.description} ${r.attributes?.name}`)).sort((a, b) => (a.attributes.sequence_order ?? 99) - (b.attributes.sequence_order ?? 99));
+    let round = 0;
+    for (const r of rounds) {
+      round++;
+      const code = r.attributes.source_id;
+      let list = [];
+      try { list = (await getJSON(`${API}/seasons/${y}/rounds/${code}/sessions`)).data || []; } catch { list = []; }
+      const sessions = list
+        .filter((x) => x.relationships?.category?.data?.id === "SBK" && x.attributes?.start_date_utc)
+        .map((x) => ({ label: x.attributes.brief_description || x.attributes.description, start: iso(x.attributes.start_date_utc), race: /^(RC\d|SPRC)$/.test(x.attributes.short_name || "") }))
+        .filter((x) => x.start)
+        .sort((a, b) => a.start.localeCompare(b.start));
+      if (!sessions.length) continue;
+      events.push({ name: r.attributes.description || r.attributes.name, place: r.attributes.name || "", round, season: y, url: `https://www.worldsbk.com/en/calendar/event/${y}-${code}`, sessions });
+    }
+  }
+  if (!events.length) throw new Error("no WorldSBK sessions in the API");
+  return events;
+}
+
+// Official source first; fill in any rounds it doesn't cover (e.g. next year's dates) from a fallback.
+async function withFallback(primary, fallback) {
+  let main = [];
+  try { main = await primary(); } catch (e) { console.log(`     primary source failed, using fallback only: ${e.message}`); }
+  let extra = [];
+  try { extra = await fallback(); } catch (e) { if (!main.length) throw e; }
+  const days = main.flatMap((e) => e.sessions.map((s) => Date.parse(s.start)));
+  const covered = (ev) => ev.sessions.some((s) => days.some((d) => Math.abs(d - Date.parse(s.start)) < 3 * 864e5));
+  const out = [...main, ...extra.filter((ev) => !covered(ev))];
+  out.sort((a, b) => a.sessions[0].start.localeCompare(b.sessions[0].start));
+  return out;
+}
+
+// ---- Official results pages for series whose schedule comes from sportstimes.
+// Each listing page links rounds in calendar order, so link N belongs to round N.
+async function roundLinks(url, re) {
+  try { return [...new Set([...(await getText(url)).matchAll(re)].map((m) => m[0]))]; }
+  catch (e) { console.log(`     results links unavailable: ${e.message}`); return []; }
+}
+const F1_SESSION = { fp1: "practice/1", fp2: "practice/2", fp3: "practice/3", qualifying: "qualifying", sprintQualifying: "sprint-qualifying", sprint: "sprint-results", gp: "race-result" };
+const FE_SESSION = { fp1: "free-practice-1", fp2: "free-practice-2", fp3: "free-practice-3", qualifying: "qualifying", race: "race", race1: "race", race2: "race" };
+async function withResults(id, events) {
+  for (const y of YEARS) {
+    const evs = events.filter((e) => e.season === y);
+    if (!evs.length) continue;
+    if (id === "f1") {
+      const links = await roundLinks(`https://www.formula1.com/en/results/${y}/races`, new RegExp(`/en/results/${y}/races/\\d+/[a-z0-9-]+(?=/race-result)`, "g"));
+      links.forEach((l, i) => {
+        const ev = evs.find((e) => e.round === i + 1);
+        if (!ev) return;
+        const base = `https://www.formula1.com${l}`;
+        ev.url = `${base}/race-result`;
+        for (const s of ev.sessions) if (F1_SESSION[s.key]) s.url = `${base}/${F1_SESSION[s.key]}`;
+      });
+    } else if (id === "f2" || id === "f3") {
+      const host = id === "f2" ? "https://www.fiaformula2.com" : "https://www.fiaformula3.com";
+      const links = await roundLinks(`${host}/Calendar`, new RegExp(`/en/racing/${y}/[a-z0-9-]+`, "g"));
+      links.forEach((l, i) => { const ev = evs.find((e) => e.round === i + 1); if (ev) ev.url = host + l; });
+    } else if (id === "fe") {
+      const links = await roundLinks("https://www.fiaformulae.com/en/results", /results-and-standings\?season=\d+&(?:amp;)?round=\d+-[a-z0-9-]+/g);
+      const seasons = links.map((l) => +l.match(/season=(\d+)/)[1]);
+      const cur = Math.max(0, ...seasons);
+      for (const l of links) {
+        const m = l.replace("&amp;", "&").match(/season=(\d+)&round=(\d+)-/);
+        if (!m || +m[1] !== cur) continue;
+        const ev = evs.find((e) => e.round === +m[2]);
+        if (!ev) continue;
+        ev.url = `https://www.fiaformulae.com/en/${l.replace("&amp;", "&")}`;
+        for (const s of ev.sessions) if (FE_SESSION[s.key]) s.url = `${ev.url}&session=${FE_SESSION[s.key]}`;
+      }
+    }
+  }
+  for (const e of events) for (const s of e.sessions) delete s.key;
+  return events;
+}
+
 const SOURCES = {
-  f1: () => sportstimes("f1"),
-  f2: () => sportstimes("f2"),
-  f3: () => sportstimes("f3"),
-  motogp: () => sportstimes("motogp"),
+  f1: async () => withResults("f1", await sportstimes("f1")),
+  f2: async () => withResults("f2", await sportstimes("f2")),
+  f3: async () => withResults("f3", await sportstimes("f3")),
+  motogp: () => dorna("MGP"),
   moto2: () => dorna("MT2"),
   moto3: () => dorna("MT3"),
   wec: () => aco("https://www.fiawec.com"),
   gtwce: () => sro("https://www.gt-world-challenge-europe.com"),
-  indycar: () => sportstimes("indycar"),
-  fe: () => sportstimes("fe"),
-  "f1-academy": () => sportstimes("f1-academy"),
+  indycar: async () => withResults("indycar", await sportstimes("indycar")),
+  fe: async () => withResults("fe", await sportstimes("fe")),
+  "f1-academy": async () => withResults("f1-academy", await sportstimes("f1-academy")),
   nascar: () => nascar("series_1"),
   "nascar-oreilly": () => nascar("series_2"),
   elms: () => aco("https://www.europeanlemansseries.com"),
   indynxt: () => indynxt(),
   supercars: () => supercars(),
   wrc: () => wrc(),
-  wsbk: () => wiki((y) => `${y} Superbike World Championship`),
+  wsbk: () => withFallback(wsbk, () => wiki((y) => `${y} Superbike World Championship`)),
   imsa: () => wiki((y) => `${y} IMSA SportsCar Championship`),
   btcc: () => wiki((y) => `${y} British Touring Car Championship`),
-  dtm: () => wiki((y) => `${y} DTM`),
-  superformula: () => wiki((y) => `${y} Super Formula Championship`),
+  dtm: () => withFallback(dtm, () => wiki((y) => `${y} DTM`)),
+  superformula: () => withFallback(superformula, () => wiki((y) => `${y} Super Formula Championship`)),
 };
 
 let previous = {};
@@ -449,7 +604,8 @@ for (const [id, fn] of Object.entries(SOURCES)) {
   try {
     const events = await fn();
     series[id] = { updated: now.toISOString(), events };
-    console.log(`ok   ${id}: ${events.length} events, ${events.reduce((n, e) => n + e.sessions.length, 0)} sessions`);
+    const linked = events.filter((e) => e.url).length, sLinked = events.reduce((n, e) => n + e.sessions.filter((s) => s.url).length, 0);
+    console.log(`ok   ${id}: ${events.length} events, ${events.reduce((n, e) => n + e.sessions.length, 0)} sessions, results links: ${linked} events/${sLinked} sessions`);
     const next = events.find((e) => e.sessions.some((s) => s.start > now.toISOString()));
     if (next) console.log(`       next: ${next.name} (${next.place}) · ${next.sessions.map((s) => `${s.label}${s.race ? "*" : ""} ${s.start.slice(5, 16)}`).join(" | ")}`);
   } catch (e) {
