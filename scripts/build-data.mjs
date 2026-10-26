@@ -297,18 +297,24 @@ async function supercars() {
 // ---- WRC official calendar (rally start time and date range; stage times aren't published in a readable form)
 async function wrc() {
   const events = [];
-  for (const y of YEARS) {
-    let html;
-    try { html = await getText(`https://www.wrc.com/en/calendar/wrc-${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
-    const cards = html.split(/(?=href="\/en\/events\/)/).slice(1);
-    let round = 0;
-    const seen = new Set();
+  const seen = new Set();
+  // Season pages plus the main calendar page (which shows next season before its own page exists).
+  // Retry a page that comes back without event cards: wrc.com occasionally serves one briefly.
+  const pages = [...YEARS.map((y) => `https://www.wrc.com/en/calendar/wrc-${y}`), "https://www.wrc.com/en/calendar"];
+  for (const url of pages) {
+    let cards = [];
+    for (let attempt = 1; attempt <= 3 && !cards.length; attempt++) {
+      let html = "";
+      try { html = await getText(url); } catch (e) { if (/^404 /.test(e.message)) break; console.log(`     wrc ${url} attempt ${attempt}: ${e.message}`); }
+      cards = html.split(/(?=href="\/en\/events\/)/).slice(1);
+      if (!cards.length && attempt < 3) await new Promise((r) => setTimeout(r, 5000 * attempt));
+    }
     for (const c of cards) {
       const slug = (c.match(/^href="\/en\/events\/([a-z0-9-]+)"/) || [])[1];
       const dt = (c.match(/<time[^>]*datetime="([^"]+)"[^>]*>([^<]*)<\/time>/) || []);
-      if (!slug || !dt[1] || seen.has(slug) || !slug.endsWith(String(y))) continue;
+      const y = +((slug || "").match(/-(20\d\d)$/) || [])[1];
+      if (!slug || !dt[1] || seen.has(slug) || !YEARS.includes(y)) continue;
       seen.add(slug);
-      round++;
       const start = new Date(dt[1]);
       const off = (dt[1].match(/([+-])(\d\d):(\d\d)$/) || []);
       const offMin = off.length ? (off[1] === "-" ? -1 : 1) * (+off[2] * 60 + +off[3]) : 0;
@@ -323,9 +329,12 @@ async function wrc() {
         sessions.push({ label: `Rally day ${i + 1}`, start: d.toISOString(), race: dLocal === endDay, allDay: true });
         if (dLocal === endDay || !endDay) break;
       }
-      events.push({ name, place: "", round, season: y, url: `https://www.wrc.com/en/events/${slug}`, sessions });
+      events.push({ name, place: "", round: 0, season: y, url: `https://www.wrc.com/en/events/${slug}`, sessions });
     }
   }
+  events.sort((a, b) => a.sessions[0].start.localeCompare(b.sessions[0].start));
+  const rounds = {};
+  for (const e of events) e.round = rounds[e.season] = (rounds[e.season] || 0) + 1;
   if (!events.length) throw new Error("no WRC events parsed");
   return events;
 }
