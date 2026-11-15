@@ -228,7 +228,8 @@ async function indynxt() {
   for (const y of YEARS) {
     let html;
     try { html = await getText(`https://www.indynxt.com/schedule?year=${y}`); } catch (e) { if (y === YEARS[0]) throw e; continue; }
-    const urls = [...new Set([...html.matchAll(new RegExp(`https://www\\.indynxt\\.com/Schedule/${y}/[A-Za-z0-9-]+`, "g"))].map((m) => m[0]))];
+    // The site links past events as http:// and upcoming ones as https:// (seen Nov 2026), so accept both and fetch over https.
+    const urls = [...new Set([...html.matchAll(new RegExp(`https?://www\\.indynxt\\.com/Schedule/${y}/[A-Za-z0-9-]+`, "g"))].map((m) => m[0].replace(/^http:/, "https:")))];
     let round = 0;
     for (const url of urls) {
       round++;
