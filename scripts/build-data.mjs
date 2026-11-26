@@ -181,10 +181,18 @@ async function sro(base) {
     const url = link.startsWith("http") ? link : base + link;
     if (!rounds.has(url) || rounds.get(url) > +m[1]) rounds.set(url, +m[1]);
   }
+  // Dates from the calendar cards, used when an event page has no timetable yet (next season, published in spring).
+  const cards = new Map();
+  const dt = (c, k) => { const m = c.match(new RegExp(`calendar__date-${k}"[\\s\\S]*?date-number">(\\d+)<[\\s\\S]*?date-month">([A-Za-z]{3})<[\\s\\S]*?date-year">(\\d{4})<`)); return m && MONTHS[m[2].toLowerCase()] != null ? Date.UTC(+m[3], MONTHS[m[2].toLowerCase()], +m[1], 12) : null; };
+  for (const c of html.split(/class="calendar__list-item"/).slice(1)) {
+    const link = (c.match(/href="([^"]*\/event\/[^"]+)"/) || [])[1];
+    const a = dt(c, "start"), b = dt(c, "end") ?? a;
+    if (link && a) cards.set(link.startsWith("http") ? link : base + link, { a, b, name: strip((c.match(/calendar__race-header"[^>]*>([\s\S]*?)<\//) || [])[1] || "") });
+  }
   const events = [];
   for (const [url, round] of [...rounds].sort((a, b) => a[1] - b[1])) {
     let page;
-    try { page = await getText(url); } catch { continue; }
+    try { page = await getText(url); } catch { page = ""; }
     const name = strip((page.match(/class="[^"]*feature__heading[^"]*"[^>]*>([\s\S]*?)<\//) || [])[1] || "") || url.split("/").pop();
     const year = +((page.match(/20\d\d/) || [])[0] || now.getUTCFullYear());
     const sessions = [];
@@ -205,9 +213,15 @@ async function sro(base) {
         sessions.push({ label, start: start.toISOString(), race: /^(main\s+)?race(\s*\d+)?$/i.test(label) || /hours? race$/i.test(label) });
       }
     }
+    const card = cards.get(url);
+    if (!sessions.length && card) {
+      // Timetable not published yet: show the weekend as dates only.
+      for (let t = card.a; t <= card.b; t += 864e5) sessions.push({ label: "Race weekend", start: new Date(t).toISOString(), race: false, allDay: true });
+      if (sessions.length) { sessions.at(-1).label = "Race day"; sessions.at(-1).race = true; }
+    }
     if (!sessions.length) continue;
     sessions.sort((a, b) => a.start.localeCompare(b.start));
-    events.push({ name, place: "", round, season: year, url, sessions });
+    events.push({ name: page ? name : card?.name || name, place: "", round, season: card ? new Date(card.a).getUTCFullYear() : year, url, sessions });
   }
   if (!events.length) throw new Error(`no events parsed from ${base}`);
   return events;
